@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Rocket, Users, Eye, AlertTriangle, CheckCircle,
-  Edit3, ChevronRight, BarChart2, Loader2,
+  Edit3, ChevronRight, BarChart2, Loader2, Mail,
 } from 'lucide-react'
 import CSVUpload from '@/components/campaigns/CSVUpload'
 
@@ -47,6 +47,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [previewResult, setPreviewResult] = useState<{ subject: string; body: string } | null>(null)
   const [previewContactId, setPreviewContactId] = useState('')
   const [previewStepId, setPreviewStepId] = useState('')
+  const [generatingDrafts, setGeneratingDrafts] = useState(false)
+  const [draftResult, setDraftResult] = useState<{ processed: number; drafted: number; skipped: number; errors: number } | null>(null)
+  const [draftError, setDraftError] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -95,6 +98,22 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       setPreviewError(err instanceof Error ? err.message : 'Preview failed')
     } finally {
       setPreviewing(false)
+    }
+  }
+
+  async function generateDraftsNow() {
+    setGeneratingDrafts(true)
+    setDraftError('')
+    setDraftResult(null)
+    try {
+      const res = await fetch(`/api/campaigns/${id}/generate-drafts`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setDraftError(data.error || 'Failed to generate drafts'); return }
+      setDraftResult(data)
+    } catch (err) {
+      setDraftError(err instanceof Error ? err.message : 'Failed to generate drafts')
+    } finally {
+      setGeneratingDrafts(false)
     }
   }
 
@@ -176,6 +195,35 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               {contacts.length === 0 ? 'Upload contacts before launching.' : 'Add sequence steps before launching.'}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Generate drafts now — shown for active campaigns */}
+      {campaign.status === 'active' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-white font-medium text-sm">Generate drafts now</p>
+              <p className="text-gray-400 text-xs mt-0.5">
+                Drafts all pending emails due today or earlier — use this after adding new contacts.
+              </p>
+              {draftError && <p className="text-red-400 text-xs mt-1">{draftError}</p>}
+              {draftResult && (
+                <p className="text-green-400 text-xs mt-1">
+                  Done — {draftResult.drafted} drafted, {draftResult.skipped} skipped, {draftResult.errors} errors
+                  {draftResult.processed === 0 ? ' (no pending emails due today)' : ''}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={generateDraftsNow}
+              disabled={generatingDrafts}
+              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
+            >
+              {generatingDrafts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              {generatingDrafts ? 'Generating…' : 'Draft Now'}
+            </button>
+          </div>
         </div>
       )}
 
