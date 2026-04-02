@@ -137,7 +137,7 @@ export async function generateDraftsDue(
     .select(SCHEDULED_EMAIL_SELECT)
     .eq('campaign_id', campaignId)
     .lte('send_date', upToDate)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'error'])
 
   if (error) throw new Error('Failed to query pending emails: ' + error.message)
 
