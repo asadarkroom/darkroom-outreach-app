@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Rocket, Users, Eye, AlertTriangle, CheckCircle,
-  Edit3, ChevronRight, BarChart2, Loader2, Mail, Calendar, Clock,
+  Edit3, ChevronRight, BarChart2, Loader2, Mail, Calendar, Clock, Trash2,
 } from 'lucide-react'
 import CSVUpload from '@/components/campaigns/CSVUpload'
 
@@ -96,10 +96,22 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [draftResult, setDraftResult] = useState<{ processed: number; drafted: number; skipped: number; errors: number } | null>(null)
   const [draftError, setDraftError] = useState('')
 
+  const [deletingContactId, setDeletingContactId] = useState<string | null>(null)
+
   const fetchContacts = useCallback(() =>
     fetch(`/api/campaigns/${id}/contacts`).then(r => r.json()).then(d => setContacts(Array.isArray(d) ? d : [])),
     [id]
   )
+
+  async function deleteContact(contactId: string) {
+    setDeletingContactId(contactId)
+    try {
+      await fetch(`/api/campaigns/${id}/contacts/${contactId}`, { method: 'DELETE' })
+      setContacts(prev => prev.filter(c => c.id !== contactId))
+    } finally {
+      setDeletingContactId(null)
+    }
+  }
 
   const fetchProgress = useCallback(() =>
     fetch(`/api/campaigns/${id}/progress`).then(r => r.json()).then(d => { if (!d.error) setProgress(d) }),
@@ -462,6 +474,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                       <th className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium">Company</th>
                       <th className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium">Status</th>
                       <th className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium">Enrolled</th>
+                      <th className="px-4 py-2.5" />
                     </tr>
                   </thead>
                   <tbody>
@@ -475,6 +488,18 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                           {c.enrolled_at
                             ? new Date(c.enrolled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                             : <span className="text-gray-600">—</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button
+                            onClick={() => deleteContact(c.id)}
+                            disabled={deletingContactId === c.id}
+                            className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-red-400 transition-colors disabled:opacity-40"
+                            title="Remove contact"
+                          >
+                            {deletingContactId === c.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />}
+                          </button>
                         </td>
                       </tr>
                     ))}
