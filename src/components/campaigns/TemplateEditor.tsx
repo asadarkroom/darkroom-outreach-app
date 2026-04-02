@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect } from 'react'
 
 interface TemplateEditorProps {
   value: string
@@ -10,73 +10,97 @@ interface TemplateEditorProps {
 }
 
 /**
- * A textarea that renders a color-coded preview of the template syntax:
+ * A textarea with syntax-highlighted overlay for template syntax:
  *  - {{field}}   → blue
  *  - {{ai: ...}} → purple
  *  - Plain text  → white
  *
- * Implementation: we overlay a div with colored spans on top of a transparent textarea.
+ * Auto-grows with content so no scroll-sync is needed.
+ * Uses a transparent textarea over a highlight div; text selection
+ * is made visible via a semi-opaque selection background.
  */
 export default function TemplateEditor({ value, onChange, placeholder, minRows = 6 }: TemplateEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const highlightRef = useRef<HTMLDivElement>(null)
 
-  function syncScroll() {
-    if (textareaRef.current && highlightRef.current) {
-      highlightRef.current.scrollTop = textareaRef.current.scrollTop
-    }
+  // Auto-resize textarea to fit content
+  function autoResize() {
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = ta.scrollHeight + 'px'
   }
 
+  useEffect(() => {
+    autoResize()
+  }, [value])
+
   function highlight(text: string): string {
-    // Escape HTML
+    // Escape HTML entities before inserting as innerHTML
     const escaped = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>')
 
-    // Color {{ai: ...}} blocks first (greedy so nested braces work)
-    const withAi = escaped.replace(
-      /(\{\{ai:[\s\S]*?\}\})/g,
-      '<span class="text-purple-400">$1</span>'
-    )
+    // Process line by line to avoid <br> interfering with regex
+    const lines = escaped.split('\n').map(line => {
+      let result = line
+      // Color {{ai: ...}} blocks (purple)
+      result = result.replace(
+        /(\{\{ai:[^}]*\}\})/g,
+        '<span style="color:#c084fc">$1</span>'
+      )
+      // Color {{field}} merge fields (blue)
+      result = result.replace(
+        /(\{\{(?!ai:)[^}]*\}\})/g,
+        '<span style="color:#60a5fa">$1</span>'
+      )
+      return result
+    })
 
-    // Color {{field}} merge fields
-    const withFields = withAi.replace(
-      /(\{\{(?!ai:)[^}]+\}\})/g,
-      '<span class="text-blue-400">$1</span>'
-    )
-
-    return withFields + ' ' // trailing space prevents last-line collapse
+    // Trailing space prevents last-line height collapse
+    return lines.join('<br>') + '&nbsp;'
   }
 
-  return (
-    <div className="relative font-mono text-sm rounded-lg border border-gray-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 overflow-hidden bg-gray-900">
-      {/* Highlighted background layer */}
-      <div
-        ref={highlightRef}
-        aria-hidden
-        className="absolute inset-0 px-3.5 py-3 text-white whitespace-pre-wrap break-words overflow-hidden pointer-events-none leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: highlight(value) }}
-      />
+  // line-height: 1.625 (leading-relaxed) × 16px base + vertical padding
+  const minHeight = minRows * 1.625 * 16 + 24 // 24px = py-3 top+bottom
 
-      {/* Transparent textarea on top */}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onScroll={syncScroll}
-        rows={minRows}
-        placeholder={placeholder}
-        className="relative w-full bg-transparent text-transparent caret-white resize-none px-3.5 py-3 leading-relaxed outline-none placeholder-gray-600 placeholder:text-opacity-100"
-        style={{ color: 'transparent', caretColor: 'white' }}
-        spellCheck={false}
-      />
+  return (
+    <div className="rounded-lg border border-gray-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 bg-gray-900">
+      {/* Editor area: highlight layer + textarea stacked */}
+      <div className="relative">
+        {/* Highlighted background layer — same padding/font as textarea */}
+        <div
+          aria-hidden
+          className="absolute inset-0 font-mono text-sm px-3.5 py-3 leading-relaxed whitespace-pre-wrap break-words pointer-events-none text-white"
+          dangerouslySetInnerHTML={{ __html: highlight(value) }}
+        />
+
+        {/* Transparent textarea on top — drives the height */}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          className="relative block w-full bg-transparent font-mono text-sm px-3.5 py-3 leading-relaxed outline-none placeholder-gray-600 resize-none overflow-hidden selection:bg-indigo-500/40"
+          style={{
+            color: 'transparent',
+            caretColor: 'white',
+            minHeight,
+          }}
+        />
+      </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 px-3.5 py-2 border-t border-gray-800 bg-gray-900/80 text-xs text-gray-500">
-        <span><span className="text-blue-400">&#123;&#123;field&#125;&#125;</span> merge field</span>
-        <span><span className="text-purple-400">&#123;&#123;ai: prompt&#125;&#125;</span> AI section</span>
+      <div className="flex items-center gap-4 px-3.5 py-2 border-t border-gray-800 text-xs text-gray-500">
+        <span>
+          <span style={{ color: '#60a5fa' }}>{'{{field}}'}</span>
+          {' '}merge field
+        </span>
+        <span>
+          <span style={{ color: '#c084fc' }}>{'{{ai: prompt}}'}</span>
+          {' '}AI section
+        </span>
       </div>
     </div>
   )
