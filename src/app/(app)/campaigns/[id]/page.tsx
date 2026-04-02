@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Rocket, Users, Eye, AlertTriangle, CheckCircle,
-  Edit3, ChevronRight, BarChart2, Loader2, Mail,
+  Edit3, ChevronRight, BarChart2, Loader2, Mail, Calendar, Clock,
 } from 'lucide-react'
 import CSVUpload from '@/components/campaigns/CSVUpload'
 
@@ -17,6 +17,15 @@ interface Contact {
   id: string; first_name: string; last_name: string; company_name: string; email: string; status: string
   enrolled_at: string | null
 }
+interface StepProgress {
+  step_number: number; day_offset: number; send_date: string
+  total: number; drafted: number; pending: number; error: number; errors: string[]
+}
+interface Progress {
+  stepProgress: StepProgress[]
+  enrolledContacts: { id: string; first_name: string | null; last_name: string | null; email: string; company_name: string | null; enrolled_at: string }[]
+  nextSteps: StepProgress[]
+}
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -26,9 +35,43 @@ function StatusBadge({ status }: { status: string }) {
     error:     'bg-yellow-900/50 text-yellow-400 border-yellow-700/50',
   }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${map[status] || map.active}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${map[status] || map.unenrolled}`}>
       {status}
     </span>
+  )
+}
+
+function StepBar({ step }: { step: StepProgress }) {
+  const pct = step.total > 0 ? Math.round((step.drafted / step.total) * 100) : 0
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-400 text-xs font-bold flex items-center justify-center">{step.step_number}</span>
+          <span className="text-sm text-white font-medium">Step {step.step_number}</span>
+          <span className="text-xs text-gray-500">Day {step.day_offset}</span>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          {step.drafted > 0 && <span className="text-green-400">{step.drafted} drafted</span>}
+          {step.pending > 0 && <span className="text-yellow-400">{step.pending} pending</span>}
+          {step.error > 0 && <span className="text-red-400">{step.error} error</span>}
+          <span className="text-gray-500 font-mono">{new Date(step.send_date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+        </div>
+      </div>
+      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-indigo-500 rounded-full transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {step.errors.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {[...new Set(step.errors)].map((e, i) => (
+            <p key={i} className="text-xs text-red-400 bg-red-900/20 rounded px-2 py-1">{e}</p>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -38,6 +81,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [progress, setProgress] = useState<Progress | null>(null)
   const [loading, setLoading] = useState(true)
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState('')
@@ -47,19 +91,32 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [previewResult, setPreviewResult] = useState<{ subject: string; body: string } | null>(null)
   const [previewContactId, setPreviewContactId] = useState('')
   const [previewStepId, setPreviewStepId] = useState('')
+  const [previewError, setPreviewError] = useState('')
   const [generatingDrafts, setGeneratingDrafts] = useState(false)
   const [draftResult, setDraftResult] = useState<{ processed: number; drafted: number; skipped: number; errors: number } | null>(null)
   const [draftError, setDraftError] = useState('')
+
+  const fetchContacts = useCallback(() =>
+    fetch(`/api/campaigns/${id}/contacts`).then(r => r.json()).then(d => setContacts(Array.isArray(d) ? d : [])),
+    [id]
+  )
+
+  const fetchProgress = useCallback(() =>
+    fetch(`/api/campaigns/${id}/progress`).then(r => r.json()).then(d => { if (!d.error) setProgress(d) }),
+    [id]
+  )
 
   useEffect(() => {
     Promise.all([
       fetch(`/api/campaigns/${id}`).then(r => r.json()),
       fetch(`/api/campaigns/${id}/steps`).then(r => r.json()),
       fetch(`/api/campaigns/${id}/contacts`).then(r => r.json()),
-    ]).then(([c, s, co]) => {
+      fetch(`/api/campaigns/${id}/progress`).then(r => r.json()),
+    ]).then(([c, s, co, p]) => {
       setCampaign(c)
       setSteps(Array.isArray(s) ? s : [])
       setContacts(Array.isArray(co) ? co : [])
+      if (!p.error) setProgress(p)
     }).finally(() => setLoading(false))
   }, [id])
 
@@ -72,9 +129,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     if (!res.ok) { setLaunchError(data.error); return }
     setLaunchSuccess(true)
     setCampaign(prev => prev ? { ...prev, status: 'active' } : prev)
+    // Re-fetch contacts and progress so UI reflects enrolled status immediately
+    await Promise.all([fetchContacts(), fetchProgress()])
   }
-
-  const [previewError, setPreviewError] = useState('')
 
   async function previewEmail() {
     if (!previewContactId || !previewStepId) return
@@ -89,11 +146,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       })
       const text = await res.text()
       const data = text ? JSON.parse(text) : {}
-      if (res.ok) {
-        setPreviewResult(data)
-      } else {
-        setPreviewError(data.error || 'Preview failed')
-      }
+      if (res.ok) { setPreviewResult(data) } else { setPreviewError(data.error || 'Preview failed') }
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : 'Preview failed')
     } finally {
@@ -110,6 +163,8 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       const data = await res.json()
       if (!res.ok) { setDraftError(data.error || 'Failed to generate drafts'); return }
       setDraftResult(data)
+      // Refresh progress to reflect new draft statuses
+      await fetchProgress()
     } catch (err) {
       setDraftError(err instanceof Error ? err.message : 'Failed to generate drafts')
     } finally {
@@ -166,7 +221,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               <CheckCircle className="w-5 h-5" />
               <div>
                 <p className="font-medium">Campaign launched!</p>
-                <p className="text-sm text-green-400/80">Drafts will be generated daily starting tomorrow.</p>
+                <p className="text-sm text-green-400/80">Day 0 emails are being drafted into your inbox now.</p>
               </div>
             </div>
           ) : (
@@ -209,9 +264,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               </p>
               {draftError && <p className="text-red-400 text-xs mt-1">{draftError}</p>}
               {draftResult && (
-                <p className="text-green-400 text-xs mt-1">
-                  Done — {draftResult.drafted} drafted, {draftResult.skipped} skipped, {draftResult.errors} errors
-                  {draftResult.processed === 0 ? ' (no pending emails due today)' : ''}
+                <p className={`text-xs mt-1 ${draftResult.errors > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+                  {draftResult.processed === 0
+                    ? 'No pending emails due today'
+                    : `${draftResult.drafted} drafted · ${draftResult.skipped} skipped · ${draftResult.errors} errors`}
+                  {draftResult.errors > 0 && ' — see error details in the overview below'}
                 </p>
               )}
             </div>
@@ -245,9 +302,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       {/* Overview tab */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Stats row */}
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'Contacts', value: contacts.length, icon: Users },
+              { label: 'Enrolled', value: progress?.enrolledContacts.length ?? contacts.filter(c => c.enrolled_at).length, icon: Users },
               { label: 'Steps', value: steps.length, icon: ChevronRight },
               { label: 'Status', value: campaign.status, icon: CheckCircle },
             ].map(({ label, value, icon: Icon }) => (
@@ -260,6 +318,67 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               </div>
             ))}
           </div>
+
+          {/* Step progress */}
+          {progress && progress.stepProgress.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Sequence Progress</h3>
+              {progress.stepProgress.map((step, i) => (
+                <StepBar key={i} step={step} />
+              ))}
+            </div>
+          )}
+
+          {/* Next upcoming emails */}
+          {progress && progress.nextSteps.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+              <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                Upcoming Emails
+              </h3>
+              <div className="space-y-2">
+                {progress.nextSteps.map((step, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-300">Step {step.step_number} — Day {step.day_offset}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-500">{step.pending} emails</span>
+                      <span className="text-indigo-300 font-medium flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {new Date(step.send_date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Enrolled contacts list */}
+          {progress && progress.enrolledContacts.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-800">
+                <h3 className="text-sm font-medium text-white">{progress.enrolledContacts.length} Enrolled Contacts</h3>
+              </div>
+              <div className="divide-y divide-gray-800/50">
+                {progress.enrolledContacts.slice(0, 10).map(c => (
+                  <div key={c.id} className="px-4 py-2.5 flex items-center justify-between">
+                    <div>
+                      <span className="text-sm text-white">{[c.first_name, c.last_name].filter(Boolean).join(' ') || c.email}</span>
+                      {c.company_name && <span className="text-xs text-gray-500 ml-2">{c.company_name}</span>}
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      Enrolled {new Date(c.enrolled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                ))}
+                {progress.enrolledContacts.length > 10 && (
+                  <div className="px-4 py-2 text-xs text-gray-500 text-center">
+                    +{progress.enrolledContacts.length - 10} more — view in Contacts tab
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {campaign.system_prompt && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -302,13 +421,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                   {previewing ? 'Generating…' : 'Preview'}
                 </button>
               </div>
-
               {previewError && (
                 <div className="bg-red-900/30 border border-red-700/50 text-red-300 rounded-xl px-4 py-3 text-sm">
                   {previewError}
                 </div>
               )}
-
               {previewResult && (
                 <div className="bg-gray-800 rounded-xl p-4 space-y-3">
                   <div>
@@ -329,15 +446,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       {/* Contacts tab */}
       {activeTab === 'contacts' && (
         <div className="space-y-6">
-          <CSVUpload campaignId={id} onImported={(n) => {
-            fetch(`/api/campaigns/${id}/contacts`).then(r => r.json()).then(data => {
-              setContacts(Array.isArray(data) ? data : [])
-            })
-          }} />
+          <CSVUpload campaignId={id} onImported={() => fetchContacts()} />
 
           {contacts.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+              <div className="px-4 py-3 border-b border-gray-800">
                 <h3 className="text-sm font-medium text-white">{contacts.length} Contacts</h3>
               </div>
               <div className="overflow-x-auto">
@@ -348,6 +461,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                       <th className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium">Email</th>
                       <th className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium">Company</th>
                       <th className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium">Status</th>
+                      <th className="px-4 py-2.5 text-left text-xs text-gray-400 font-medium">Enrolled</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -357,6 +471,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                         <td className="px-4 py-2.5 text-gray-300 font-mono text-xs">{c.email}</td>
                         <td className="px-4 py-2.5 text-gray-400">{c.company_name || '—'}</td>
                         <td className="px-4 py-2.5"><StatusBadge status={c.status} /></td>
+                        <td className="px-4 py-2.5 text-xs text-gray-400">
+                          {c.enrolled_at
+                            ? new Date(c.enrolled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : <span className="text-gray-600">—</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
