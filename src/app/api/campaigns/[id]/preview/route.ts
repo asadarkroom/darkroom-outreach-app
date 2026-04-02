@@ -35,12 +35,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Contact or step not found' }, { status: 404 })
   }
 
-  const { subject, body } = await previewTemplate(
-    step.subject_template,
-    step.body_template,
-    contact,
-    campaign.system_prompt
-  )
-
-  return NextResponse.json({ subject, body })
+  try {
+    const { subject, body } = await previewTemplate(
+      step.subject_template,
+      step.body_template,
+      contact,
+      campaign.system_prompt
+    )
+    return NextResponse.json({ subject, body })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to generate preview'
+    console.error('Preview error:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }

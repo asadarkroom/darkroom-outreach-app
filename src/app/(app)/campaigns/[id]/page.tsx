@@ -71,17 +71,31 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     setCampaign(prev => prev ? { ...prev, status: 'active' } : prev)
   }
 
+  const [previewError, setPreviewError] = useState('')
+
   async function previewEmail() {
     if (!previewContactId || !previewStepId) return
     setPreviewing(true)
-    const res = await fetch(`/api/campaigns/${id}/preview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact_id: previewContactId, step_id: previewStepId }),
-    })
-    const data = await res.json()
-    setPreviewing(false)
-    if (res.ok) setPreviewResult(data)
+    setPreviewError('')
+    setPreviewResult(null)
+    try {
+      const res = await fetch(`/api/campaigns/${id}/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact_id: previewContactId, step_id: previewStepId }),
+      })
+      const text = await res.text()
+      const data = text ? JSON.parse(text) : {}
+      if (res.ok) {
+        setPreviewResult(data)
+      } else {
+        setPreviewError(data.error || 'Preview failed')
+      }
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : 'Preview failed')
+    } finally {
+      setPreviewing(false)
+    }
   }
 
   if (loading) {
@@ -240,6 +254,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                   {previewing ? 'Generating…' : 'Preview'}
                 </button>
               </div>
+
+              {previewError && (
+                <div className="bg-red-900/30 border border-red-700/50 text-red-300 rounded-xl px-4 py-3 text-sm">
+                  {previewError}
+                </div>
+              )}
 
               {previewResult && (
                 <div className="bg-gray-800 rounded-xl p-4 space-y-3">
