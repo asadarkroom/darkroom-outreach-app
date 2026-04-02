@@ -137,6 +137,7 @@ create table public.contacts (
   reply_detected_at    timestamptz,
   status               text not null default 'active'
                          check (status in ('active', 'unenrolled', 'completed', 'error')),
+  created_at           timestamptz not null default now(),
   unique (campaign_id, email)
 );
 

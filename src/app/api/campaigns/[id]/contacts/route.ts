@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .from('contacts')
     .select('*')
     .eq('campaign_id', id)
-    .order('created_at', { ascending: false })
+    .order('email', { ascending: true })
 
   if (status) query = query.eq('status', status)
   if (search) {
