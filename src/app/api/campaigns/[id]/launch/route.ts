@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/options'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { generateDraftsForDate } from '@/lib/drafts/generate'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -118,9 +119,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }))
   await supabase.from('analytics_events').insert(enrollEvents)
 
+  // Immediately draft Day 0 emails
+  const todayStr = today.toISOString().split('T')[0]
+  let draftResults = { processed: 0, drafted: 0, skipped: 0, errors: 0 }
+  try {
+    draftResults = await generateDraftsForDate(todayStr, id)
+  } catch (err) {
+    console.error('Day 0 draft generation failed:', err instanceof Error ? err.message : err)
+  }
+
   return NextResponse.json({
     success: true,
     enrolled: contactUpdates.length,
     scheduled: scheduledEmailRows.length,
+    drafts: draftResults,
   })
 }
