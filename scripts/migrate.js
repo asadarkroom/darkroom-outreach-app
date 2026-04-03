@@ -28,6 +28,7 @@ if (!DATABASE_URL) {
 const MIGRATIONS = [
   path.join(__dirname, '../supabase/migrations/001_initial_schema.sql'),
   path.join(__dirname, '../supabase/migrations/002_analytics_views.sql'),
+  path.join(__dirname, '../supabase/migrations/003_inbound_visitor_outreach.sql'),
 ]
 
 async function run() {

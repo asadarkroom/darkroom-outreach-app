@@ -27,5 +27,7 @@ export const config = {
     '/analytics/:path*',
     '/admin/:path*',
     '/settings/:path*',
+    '/inbound/:path*',
+    '/web-visitors/:path*',
   ],
 }

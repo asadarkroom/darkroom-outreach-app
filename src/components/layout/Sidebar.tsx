@@ -11,11 +11,15 @@ import {
   Shield,
   LogOut,
   Mail,
+  Inbox,
+  Users,
 } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/campaigns', label: 'Campaigns', icon: Megaphone },
+  { href: '/inbound', label: 'Inbound', icon: Inbox },
+  { href: '/web-visitors', label: 'Web Visitors', icon: Users },
   { href: '/analytics', label: 'Analytics', icon: BarChart2 },
 ]
 
