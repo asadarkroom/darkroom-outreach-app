@@ -109,6 +109,67 @@ export async function renderTemplate(
 }
 
 /**
+ * Generic template renderer for inbound / visitor contacts.
+ * Accepts an arbitrary field map instead of a Contact object.
+ *
+ * @param template      - Template string with {{field}} and {{ai: prompt}} tokens
+ * @param fields        - Key/value merge fields (e.g. { first_name: 'John', company_name: 'Acme' })
+ * @param systemPrompt  - System prompt for AI blocks
+ * @param contextNotes  - Extra context passed to Claude for AI blocks (e.g. research summary)
+ */
+export async function renderTemplateWithFields(
+  template: string,
+  fields: Record<string, string>,
+  systemPrompt: string,
+  contextNotes = ''
+): Promise<string> {
+  const aiBlocks = findAiBlocks(template)
+  let result = template
+
+  for (const block of aiBlocks) {
+    const contextLines = Object.entries(fields)
+      .map(([k, v]) => v ? `${k.replace(/_/g, ' ')}: ${v}` : null)
+      .filter(Boolean)
+      .join('\n')
+
+    const contextSection = [contextLines, contextNotes].filter(Boolean).join('\n')
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 500,
+      system: [
+        systemPrompt,
+        '',
+        'You are generating personalized sections of sales outreach emails.',
+        'Write ONLY the requested content — no greetings, no sign-offs, no markdown, no explanation.',
+        'Be concise, natural, and human-sounding.',
+      ].join('\n'),
+      messages: [
+        {
+          role: 'user',
+          content: [
+            `Contact information:\n${contextSection}`,
+            '',
+            `Write the following for this contact:\n${block.prompt}`,
+          ].join('\n'),
+        },
+      ],
+    })
+
+    const content = message.content[0]
+    const filled = content.type === 'text' ? content.text.trim() : ''
+    result = result.replace(block.full, filled)
+  }
+
+  // Apply merge fields
+  result = result.replace(/\{\{(\w+)\}\}/g, (match, field) => {
+    return fields[field] ?? match
+  })
+
+  return result
+}
+
+/**
  * Preview a template with a specific contact — returns subject + body.
  */
 export async function previewTemplate(
