@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   for (const enrollment of inboundActive || []) {
     results.checked++
     try {
-      const seq = enrollment.inbound_sequences as { sender_user_id: string | null }
+      const seq = enrollment.inbound_sequences as unknown as { sender_user_id: string | null }
       const senderUserId = seq?.sender_user_id
       if (!senderUserId || !enrollment.contact_email) continue
 
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
   for (const enrollment of visitorActive || []) {
     results.checked++
     try {
-      const seq = enrollment.visitor_sequences as { sender_user_id: string | null }
+      const seq = enrollment.visitor_sequences as unknown as { sender_user_id: string | null }
       const senderUserId = seq?.sender_user_id
       if (!senderUserId || !enrollment.contact_email) continue
 
