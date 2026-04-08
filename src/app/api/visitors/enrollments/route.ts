@@ -84,8 +84,10 @@ export async function GET(req: NextRequest) {
     stats.total++
     const s = row.status as keyof typeof stats
     if (s in stats) stats[s]++
-    const f = row.fit_assessment as keyof typeof stats
-    if (f && f in stats) stats[f]++
+    const f = row.fit_assessment as string | null
+    if (f === 'good_fit') stats.good_fit++
+    else if (f === 'not_fit') stats.not_fit++
+    else if (f === 'existing_deal') stats.existing_deal++
   }
 
   return NextResponse.json({ enrollments: data, total: count, stats })

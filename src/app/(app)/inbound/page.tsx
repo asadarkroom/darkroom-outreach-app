@@ -3,16 +3,16 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  Mail, Clock, CheckCircle, AlertTriangle, Star, MessageSquare,
-  ArrowRight, RefreshCw, Settings,
+  Mail, Clock, CheckCircle, AlertTriangle, MessageSquare,
+  ArrowRight, RefreshCw, Settings, UserX,
 } from 'lucide-react'
 
 interface InboundStats {
   total: number
   active: number
   replied: number
-  draft_review: number
   completed: number
+  unenrolled: number
   error: number
 }
 
@@ -23,26 +23,30 @@ interface Enrollment {
   company_name: string | null
   services_interested: string | null
   media_budget: string | null
+  inquiry_type: string | null
   status: string
-  is_high_value: boolean
-  research_summary: string | null
   enrolled_at: string
   reply_detected_at: string | null
 }
 
-function StatusBadge({ status, isHighValue }: { status: string; isHighValue: boolean }) {
+function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    active: 'bg-green-900/50 text-green-400 border border-green-700/50',
-    replied: 'bg-blue-900/50 text-blue-400 border border-blue-700/50',
-    draft_review: 'bg-yellow-900/50 text-yellow-400 border border-yellow-700/50',
-    completed: 'bg-gray-800 text-gray-400 border border-gray-700',
-    error: 'bg-red-900/50 text-red-400 border border-red-700/50',
-    unenrolled: 'bg-gray-800 text-gray-500 border border-gray-700',
+    active:     'bg-green-900/50 text-green-400 border border-green-700/50',
+    replied:    'bg-blue-900/50 text-blue-400 border border-blue-700/50',
+    completed:  'bg-gray-800 text-gray-400 border border-gray-700',
+    unenrolled: 'bg-orange-900/50 text-orange-400 border border-orange-700/50',
+    error:      'bg-red-900/50 text-red-400 border border-red-700/50',
+  }
+  const labels: Record<string, string> = {
+    active: 'Draft Created',
+    replied: 'Replied',
+    completed: 'Completed',
+    unenrolled: 'No Sequence',
+    error: 'Error',
   }
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${map[status] || map.active}`}>
-      {isHighValue && <Star className="w-2.5 h-2.5" />}
-      {status === 'draft_review' ? 'Needs Review' : status}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map[status] || map.active}`}>
+      {labels[status] || status}
     </span>
   )
 }
@@ -110,7 +114,7 @@ export default function InboundPage() {
         <div>
           <h1 className="text-xl font-semibold text-white">Inbound Leads</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Auto-enrolled from HubSpot form submissions
+            HubSpot form submissions — Gmail draft created for each lead
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -134,12 +138,12 @@ export default function InboundPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatCard label="Total" value={stats.total} icon={Mail} color="bg-gray-700/50 text-gray-400" />
-          <StatCard label="Active" value={stats.active} icon={Clock} color="bg-green-900/50 text-green-400" />
+          <StatCard label="Draft Created" value={stats.active} icon={Clock} color="bg-green-900/50 text-green-400" />
           <StatCard label="Replied" value={stats.replied} icon={MessageSquare} color="bg-blue-900/50 text-blue-400" />
-          <StatCard label="Needs Review" value={stats.draft_review} icon={Star} color="bg-yellow-900/50 text-yellow-400" />
           <StatCard label="Completed" value={stats.completed} icon={CheckCircle} color="bg-indigo-900/50 text-indigo-400" />
+          <StatCard label="No Sequence" value={stats.unenrolled} icon={UserX} color="bg-orange-900/50 text-orange-400" />
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs text-gray-500 uppercase tracking-wide">Reply Rate</span>
@@ -152,26 +156,26 @@ export default function InboundPage() {
         </div>
       )}
 
-      {/* Needs Review Banner */}
-      {stats && stats.draft_review > 0 && (
-        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-xl p-4 flex items-center justify-between">
+      {/* No-sequence warning */}
+      {stats && stats.unenrolled > 0 && (
+        <div className="bg-orange-900/20 border border-orange-700/50 rounded-xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <Star className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+            <UserX className="w-4 h-4 text-orange-400 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-yellow-300">
-                {stats.draft_review} high-value {stats.draft_review === 1 ? 'lead' : 'leads'} need manual review
+              <p className="text-sm font-medium text-orange-300">
+                {stats.unenrolled} lead{stats.unenrolled !== 1 ? 's' : ''} received with no active sequence
               </p>
-              <p className="text-xs text-yellow-500 mt-0.5">
-                These companies exceed the $20M revenue / $50k ad spend threshold and were held for your approval.
+              <p className="text-xs text-orange-500 mt-0.5">
+                Create and activate an inbound sequence so future submissions get drafted automatically.
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setStatusFilter('draft_review')}
-            className="px-3 py-1.5 text-xs bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg transition-colors flex-shrink-0"
+          <Link
+            href="/inbound/sequences"
+            className="px-3 py-1.5 text-xs bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors flex-shrink-0"
           >
-            Review Now
-          </button>
+            Set up Sequence
+          </Link>
         </div>
       )}
 
@@ -190,10 +194,10 @@ export default function InboundPage() {
           className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500"
         >
           <option value="">All statuses</option>
-          <option value="draft_review">Needs Review</option>
-          <option value="active">Active</option>
+          <option value="active">Draft Created</option>
           <option value="replied">Replied</option>
           <option value="completed">Completed</option>
+          <option value="unenrolled">No Sequence</option>
           <option value="error">Error</option>
         </select>
       </div>
@@ -202,7 +206,7 @@ export default function InboundPage() {
       {enrollments.length === 0 ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
           <Mail className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">No inbound enrollments yet</p>
+          <p className="text-gray-400 font-medium">No inbound leads yet</p>
           <p className="text-gray-600 text-sm mt-1">
             Configure Zapier to POST to <code className="text-indigo-400">/api/webhooks/hubspot</code> when a new form submission arrives.
           </p>
@@ -221,9 +225,10 @@ export default function InboundPage() {
               <tr className="border-b border-gray-800">
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Contact</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Company</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Services</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Budget</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Enrolled</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Received</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -235,9 +240,12 @@ export default function InboundPage() {
                     <p className="text-gray-500 text-xs">{e.contact_email}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-300">{e.company_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate" title={e.services_interested || ''}>
+                    {e.services_interested || '—'}
+                  </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{e.media_budget || '—'}</td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={e.status} isHighValue={e.is_high_value} />
+                    <StatusBadge status={e.status} />
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
                     {new Date(e.enrolled_at).toLocaleDateString()}

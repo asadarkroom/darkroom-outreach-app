@@ -35,16 +35,16 @@ interface Enrollment {
 
 function FitBadge({ fit }: { fit: string | null }) {
   const map: Record<string, string> = {
-    good_fit: 'bg-green-900/50 text-green-400 border border-green-700/50',
-    not_fit: 'bg-gray-800 text-gray-500 border border-gray-700',
+    good_fit:      'bg-green-900/50 text-green-400 border border-green-700/50',
+    not_fit:       'bg-red-900/50 text-red-400 border border-red-700/50',
     existing_deal: 'bg-blue-900/50 text-blue-400 border border-blue-700/50',
-    uncertain: 'bg-yellow-900/50 text-yellow-400 border border-yellow-700/50',
+    uncertain:     'bg-yellow-900/50 text-yellow-400 border border-yellow-700/50',
   }
   const labels: Record<string, string> = {
     good_fit: 'Good Fit', not_fit: 'Not a Fit',
     existing_deal: 'Existing Deal', uncertain: 'Uncertain',
   }
-  if (!fit) return null
+  if (!fit) return <span className="text-gray-600 text-xs">—</span>
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map[fit] || ''}`}>
       {labels[fit] || fit}
@@ -54,16 +54,20 @@ function FitBadge({ fit }: { fit: string | null }) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    active: 'bg-green-900/50 text-green-400',
-    replied: 'bg-blue-900/50 text-blue-400',
-    completed: 'bg-gray-800 text-gray-400',
-    skipped: 'bg-gray-800 text-gray-500',
-    no_email: 'bg-orange-900/50 text-orange-400',
-    error: 'bg-red-900/50 text-red-400',
+    active:    'bg-green-900/50 text-green-400 border border-green-700/50',
+    replied:   'bg-blue-900/50 text-blue-400 border border-blue-700/50',
+    completed: 'bg-gray-800 text-gray-400 border border-gray-700',
+    skipped:   'bg-gray-800 text-gray-500 border border-gray-700',
+    no_email:  'bg-orange-900/50 text-orange-400 border border-orange-700/50',
+    error:     'bg-red-900/50 text-red-400 border border-red-700/50',
+  }
+  const labels: Record<string, string> = {
+    active: 'Draft Created', replied: 'Replied', completed: 'Completed',
+    skipped: 'Skipped', no_email: 'No Email', error: 'Error',
   }
   return (
-    <span className={`px-2 py-0.5 rounded text-xs ${map[status] || 'bg-gray-800 text-gray-400'}`}>
-      {status === 'no_email' ? 'No Email' : status}
+    <span className={`px-2 py-0.5 rounded text-xs border ${map[status] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>
+      {labels[status] || status}
     </span>
   )
 }
@@ -210,12 +214,12 @@ export default function WebVisitorsPage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-          <StatCard label="Total" value={stats.total} icon={Users} color="bg-gray-700/50 text-gray-400" />
-          <StatCard label="Active" value={stats.active} icon={Clock} color="bg-green-900/50 text-green-400" />
-          <StatCard label="Replied" value={stats.replied} icon={Mail} color="bg-blue-900/50 text-blue-400" />
-          <StatCard label="Good Fit" value={stats.good_fit} icon={CheckCircle} color="bg-indigo-900/50 text-indigo-400" />
-          <StatCard label="Not a Fit" value={stats.not_fit} icon={XCircle} color="bg-gray-700/50 text-gray-400" />
-          <StatCard label="No Email" value={stats.no_email} icon={Mail} color="bg-orange-900/50 text-orange-400" />
+          <StatCard label="Total Seen" value={stats.total} icon={Users} color="bg-gray-700/50 text-gray-400" />
+          <StatCard label="Good Fit" value={stats.good_fit} icon={CheckCircle} color="bg-green-900/50 text-green-400" />
+          <StatCard label="Not a Fit" value={stats.not_fit} icon={XCircle} color="bg-red-900/50 text-red-400" />
+          <StatCard label="Existing Deal" value={stats.existing_deal} icon={CheckCircle} color="bg-blue-900/50 text-blue-400" />
+          <StatCard label="Enrolled" value={stats.active} icon={Clock} color="bg-indigo-900/50 text-indigo-400" />
+          <StatCard label="Replied" value={stats.replied} icon={Mail} color="bg-purple-900/50 text-purple-400" />
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <span className="text-xs text-gray-500 uppercase tracking-wide block mb-2">Reply Rate</span>
             <p className="text-2xl font-semibold text-white">{replyRate}%</p>

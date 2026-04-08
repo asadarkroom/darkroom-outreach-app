@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     .from('inbound_enrollments')
     .select('status')
 
-  const statMap = { total: 0, active: 0, replied: 0, draft_review: 0, completed: 0, error: 0 }
+  const statMap = { total: 0, active: 0, replied: 0, completed: 0, unenrolled: 0, error: 0 }
   for (const row of stats || []) {
     statMap.total++
     const s = row.status as keyof typeof statMap

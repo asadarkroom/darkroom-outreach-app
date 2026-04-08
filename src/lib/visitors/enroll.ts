@@ -31,10 +31,27 @@ export async function enrollVisitorContact(
   const supabase = createAdminClient()
   const companyName = row.company || row.name
 
-  // 1. Check HubSpot for existing deal
+  // 1. Check HubSpot for existing deal — record in DB so it shows in the UI
   if (companyName) {
     const dealExists = await checkDealExists(companyName).catch(() => false)
     if (dealExists) {
+      await supabase.from('visitor_enrollments').insert({
+        sequence_id: null,
+        contact_name: row.name,
+        contact_email: row.email?.toLowerCase() || null,
+        company_name: companyName || null,
+        company_url: row.companyUrl || null,
+        company_size: row.companySize || null,
+        job_title: row.title || null,
+        visited_page: row.visitedPage || null,
+        visit_date: row.date ? new Date(row.date).toISOString() : null,
+        industry: row.industry || null,
+        sheet_row_number: row.rowNumber,
+        google_sheet_id: process.env.GOOGLE_VISITOR_SHEET_ID || null,
+        status: 'skipped',
+        fit_assessment: 'existing_deal',
+        hubspot_deal_found: true,
+      })
       return { rowNumber: row.rowNumber, company: companyName, outcome: 'skipped_deal', reason: 'Existing HubSpot deal' }
     }
   }
