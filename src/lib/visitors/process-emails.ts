@@ -92,7 +92,10 @@ export async function processVisitorEmail(
     const fromName = senderUser?.name || 'Darkroom'
 
     const contactEmail = enrollment.contact_email as string
-    const autoSend = sequence.auto_send as boolean
+
+    // Draft mode by default. Set AUTO_SEND_EMAILS=true in Vercel env to auto-send.
+    // The sequence's auto_send field also acts as a per-sequence override when AUTO_SEND_EMAILS=true.
+    const autoSend = process.env.AUTO_SEND_EMAILS === 'true' && (sequence.auto_send as boolean)
 
     if (autoSend) {
       const messageId = await sendGmailEmail({
@@ -113,25 +116,25 @@ export async function processVisitorEmail(
       }).eq('id', emailId)
 
       return { emailId, status: 'sent' }
-    } else {
-      const draftId = await createGmailDraft({
-        userId: senderUserId,
-        to: contactEmail,
-        subject,
-        body,
-        fromName,
-        fromEmail,
-      })
-
-      await supabase.from('visitor_emails').update({
-        status: 'draft',
-        gmail_draft_id: draftId,
-        generated_subject: subject,
-        generated_body: body,
-      }).eq('id', emailId)
-
-      return { emailId, status: 'draft' }
     }
+
+    const draftId = await createGmailDraft({
+      userId: senderUserId,
+      to: contactEmail,
+      subject,
+      body,
+      fromName,
+      fromEmail,
+    })
+
+    await supabase.from('visitor_emails').update({
+      status: 'draft',
+      gmail_draft_id: draftId,
+      generated_subject: subject,
+      generated_body: body,
+    }).eq('id', emailId)
+
+    return { emailId, status: 'draft' }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'Unknown error'
     await supabase.from('visitor_emails').update({
