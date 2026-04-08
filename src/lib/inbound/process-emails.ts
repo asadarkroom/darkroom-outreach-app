@@ -91,10 +91,11 @@ export async function processInboundEmail(
       renderTemplateWithFields(step.body_template as string, fields, systemPrompt, contextNotes),
     ])
 
-    // Get sender email
+    // Get sender email and name from user record
     const senderProfile = await getGmailProfile(senderUserId)
     const fromEmail = senderProfile?.email || ''
-    const fromName = (sequence.name as string) ? 'Manuela' : 'Darkroom'
+    const { data: senderUser } = await supabase.from('users').select('name').eq('id', senderUserId).single()
+    const fromName = senderUser?.name || 'Darkroom'
 
     const isHighValue = enrollment.is_high_value as boolean
     const contactEmail = enrollment.contact_email as string

@@ -13,23 +13,31 @@ export async function DELETE(
 
   const supabase = createAdminClient()
 
-  // Verify the contact belongs to this campaign and user
+  // Verify contact belongs to this campaign
   const { data: contact, error: fetchError } = await supabase
     .from('contacts')
     .select('id')
     .eq('id', contactId)
     .eq('campaign_id', id)
-    .eq('user_id', session.user.id)
     .single()
 
   if (fetchError || !contact) {
     return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
   }
 
-  // Delete associated scheduled emails first
-  await supabase.from('scheduled_emails').delete().eq('contact_id', contactId)
+  // Only campaign creator or admin can delete contacts
+  const role = session.user.role as string
+  if (role !== 'admin') {
+    const { data: camp } = await supabase
+      .from('campaigns')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+      .single()
+    if (!camp) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
-  // Delete the contact
+  await supabase.from('scheduled_emails').delete().eq('contact_id', contactId)
   const { error } = await supabase.from('contacts').delete().eq('id', contactId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

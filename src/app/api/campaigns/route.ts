@@ -8,14 +8,20 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createAdminClient()
+  // All campaigns visible to all authenticated users; join author name
   const { data, error } = await supabase
     .from('campaigns')
-    .select('*')
-    .eq('user_id', session.user.id)
+    .select('*, users!user_id(name)')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  const result = (data || []).map((c: { users?: { name: string } | null; [key: string]: unknown }) => {
+    const { users, ...rest } = c
+    return { ...rest, author_name: users?.name || null }
+  })
+
+  return NextResponse.json(result)
 }
 
 export async function POST(req: NextRequest) {

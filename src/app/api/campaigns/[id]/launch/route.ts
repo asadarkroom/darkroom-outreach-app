@@ -11,16 +11,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const supabase = createAdminClient()
 
-  // Verify ownership and get campaign
+  // Verify campaign exists
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
     .select('*')
     .eq('id', id)
-    .eq('user_id', session.user.id)
     .single()
 
   if (campaignError || !campaign) {
     return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  }
+
+  // Only campaign creator or admin can launch
+  const role = session.user.role as string
+  if (role !== 'admin' && campaign.user_id !== session.user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   if (campaign.status !== 'draft') {

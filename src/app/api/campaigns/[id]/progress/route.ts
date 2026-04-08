@@ -10,12 +10,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const supabase = createAdminClient()
 
-  // Verify ownership
+  // Any authenticated user can view progress for any campaign
   const { data: campaign } = await supabase
     .from('campaigns')
     .select('id')
     .eq('id', id)
-    .eq('user_id', session.user.id)
     .single()
   if (!campaign) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

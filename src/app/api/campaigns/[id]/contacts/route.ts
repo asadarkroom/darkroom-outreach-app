@@ -3,7 +3,16 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/options'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-async function verifyCampaignOwner(userId: string, campaignId: string) {
+/** True if the campaign exists (for read access). */
+async function campaignExists(campaignId: string): Promise<boolean> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('campaigns').select('id').eq('id', campaignId).single()
+  return !!data
+}
+
+/** True if user is creator of the campaign or an admin (for write access). */
+async function canMutate(userId: string, role: string, campaignId: string): Promise<boolean> {
+  if (role === 'admin') return true
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('campaigns')
@@ -18,7 +27,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  if (!await verifyCampaignOwner(session.user.id, id)) {
+
+  if (!await campaignExists(id)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -49,8 +59,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  if (!await verifyCampaignOwner(session.user.id, id)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  if (!await canMutate(session.user.id, session.user.role as string, id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const contacts = await req.json()
@@ -63,9 +74,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'No valid contacts (email required)' }, { status: 400 })
   }
 
+  // Get campaign owner to assign user_id on contacts
+  const supabase = createAdminClient()
+  const { data: campaign } = await supabase.from('campaigns').select('user_id').eq('id', id).single()
+  const contactUserId = campaign?.user_id || session.user.id
+
   const rows = validContacts.map(c => ({
     campaign_id: id,
-    user_id: session.user.id,
+    user_id: contactUserId,
     first_name: c.first_name || null,
     last_name: c.last_name || null,
     company_name: c.company_name || null,
@@ -77,8 +93,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     status: 'active',
   }))
 
-  const supabase = createAdminClient()
-  // Upsert to handle deduplication by email within campaign
   const { data, error } = await supabase
     .from('contacts')
     .upsert(rows, { onConflict: 'campaign_id,email', ignoreDuplicates: false })
