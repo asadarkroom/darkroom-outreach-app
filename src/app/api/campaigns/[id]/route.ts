@@ -3,33 +3,48 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/options'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-async function getCampaign(userId: string, id: string) {
+/** Returns true if the session user can mutate this campaign (creator or admin). */
+async function canMutate(userId: string, role: string, campaignId: string): Promise<boolean> {
+  if (role === 'admin') return true
   const supabase = createAdminClient()
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('campaigns')
-    .select('*')
-    .eq('id', id)
+    .select('id')
+    .eq('id', campaignId)
     .eq('user_id', userId)
     .single()
-  return { data, error }
+  return !!data
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  const { data, error } = await getCampaign(session.user.id, id)
+
+  const supabase = createAdminClient()
+  // Any authenticated user can view any campaign
+  const { data, error } = await supabase
+    .from('campaigns')
+    .select('*, users!user_id(name)')
+    .eq('id', id)
+    .single()
+
   if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json(data)
+
+  const { users, ...rest } = data as { users?: { name: string } | null; [key: string]: unknown }
+  return NextResponse.json({ ...rest, author_name: (users as { name: string } | null)?.name || null })
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  const body = await req.json()
 
-  // Only allow updating certain fields
+  if (!await canMutate(session.user.id, session.user.role as string, id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const body = await req.json()
   const allowed = ['name', 'system_prompt', 'from_name', 'status']
   const updates: Record<string, unknown> = {}
   for (const key of allowed) {
@@ -45,7 +60,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from('campaigns')
     .update(updates)
     .eq('id', id)
-    .eq('user_id', session.user.id)
     .select()
     .single()
 
@@ -58,13 +72,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
 
-  const supabase = createAdminClient()
-  const { error } = await supabase
-    .from('campaigns')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', session.user.id)
+  if (!await canMutate(session.user.id, session.user.role as string, id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('campaigns').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

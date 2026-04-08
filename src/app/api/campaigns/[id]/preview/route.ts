@@ -16,12 +16,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const supabase = createAdminClient()
 
-  // Verify campaign ownership
+  // Any authenticated user can preview any campaign
   const { data: campaign } = await supabase
     .from('campaigns')
     .select('system_prompt, from_name')
     .eq('id', id)
-    .eq('user_id', session.user.id)
     .single()
 
   if (!campaign) return NextResponse.json({ error: 'Not found' }, { status: 404 })

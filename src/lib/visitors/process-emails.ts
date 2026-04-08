@@ -88,7 +88,8 @@ export async function processVisitorEmail(
 
     const senderProfile = await getGmailProfile(senderUserId)
     const fromEmail = senderProfile?.email || ''
-    const fromName = 'Asa'
+    const { data: senderUser } = await supabase.from('users').select('name').eq('id', senderUserId).single()
+    const fromName = senderUser?.name || 'Darkroom'
 
     const contactEmail = enrollment.contact_email as string
     const autoSend = sequence.auto_send as boolean

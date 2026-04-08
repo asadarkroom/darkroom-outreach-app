@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, use, useCallback } from 'react'
+import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -11,6 +12,7 @@ import CSVUpload from '@/components/campaigns/CSVUpload'
 
 interface Campaign {
   id: string; name: string; status: string; system_prompt: string; from_name: string; launched_at: string | null
+  user_id: string; author_name: string | null
 }
 interface Step { id: string; step_number: number; day_offset: number; subject_template: string; body_template: string }
 interface Contact {
@@ -78,6 +80,7 @@ function StepBar({ step }: { step: StepProgress }) {
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const { data: session } = useSession()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -212,16 +215,21 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             <CampaignStatusBadge status={campaign.status} />
           </div>
           {campaign.from_name && <p className="text-gray-400 text-sm mt-1">From: {campaign.from_name}</p>}
+          {campaign.author_name && (
+            <p className="text-xs text-gray-500 mt-0.5">Created by {campaign.author_name}</p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Link href={`/analytics/${id}`} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <BarChart2 className="w-4 h-4" />
             Analytics
           </Link>
-          <Link href={`/campaigns/${id}/edit`} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            <Edit3 className="w-4 h-4" />
-            Edit
-          </Link>
+          {(session?.user?.id === campaign.user_id || session?.user?.role === 'admin') && (
+            <Link href={`/campaigns/${id}/edit`} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              <Edit3 className="w-4 h-4" />
+              Edit
+            </Link>
+          )}
         </div>
       </div>
 

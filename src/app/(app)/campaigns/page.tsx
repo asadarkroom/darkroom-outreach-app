@@ -16,6 +16,7 @@ interface Campaign {
   drafts_today: number
   error_count: number
   created_at: string
+  author_name: string | null
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -101,7 +102,7 @@ export default function CampaignsPage() {
             <div key={c.campaign_id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-gray-700 transition-colors">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-1">
                     <Link href={`/campaigns/${c.campaign_id}`} className="font-medium text-white hover:text-indigo-400 transition-colors">
                       {c.name}
                     </Link>
@@ -112,6 +113,9 @@ export default function CampaignsPage() {
                       </span>
                     )}
                   </div>
+                  {c.author_name && (
+                    <p className="text-xs text-gray-500 mb-2">by {c.author_name}</p>
+                  )}
                   <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400">
                     <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />{c.total_enrolled} enrolled</span>
                     <span className="flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" />{c.reply_rate || 0}% reply rate</span>

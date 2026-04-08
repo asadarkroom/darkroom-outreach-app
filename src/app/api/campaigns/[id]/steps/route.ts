@@ -3,7 +3,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/options'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-async function verifyCampaignOwner(userId: string, campaignId: string) {
+async function campaignExists(campaignId: string): Promise<boolean> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('campaigns').select('id').eq('id', campaignId).single()
+  return !!data
+}
+
+async function canMutate(userId: string, role: string, campaignId: string): Promise<boolean> {
+  if (role === 'admin') return true
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('campaigns')
@@ -18,7 +25,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  if (!await verifyCampaignOwner(session.user.id, id)) {
+
+  if (!await campaignExists(id)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -37,8 +45,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  if (!await verifyCampaignOwner(session.user.id, id)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  if (!await canMutate(session.user.id, session.user.role as string, id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const steps = await req.json()
@@ -47,8 +56,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const supabase = createAdminClient()
-
-  // Delete existing steps and re-insert (simplest approach for full replace)
   await supabase.from('sequence_steps').delete().eq('campaign_id', id)
 
   if (steps.length > 0) {
