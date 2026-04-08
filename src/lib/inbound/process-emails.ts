@@ -1,15 +1,14 @@
 /**
- * Process a single inbound_email row: render, send (or draft), log to HubSpot.
+ * Process a single inbound_email row: render and create a Gmail draft.
  *
- * High-value enrollments → create Gmail draft (status: 'draft')
- * Normal enrollments → send immediately (status: 'sent') + log to HubSpot
+ * Inbound contacts reached out — a human always reviews and sends the draft.
+ * No auto-send path. To log to HubSpot after sending, use logEmailEngagement()
+ * from lib/hubspot/client in a future manual-send webhook if needed.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { renderTemplateWithFields } from '@/lib/claude/personalize'
-import { sendGmailEmail } from '@/lib/gmail/send'
 import { createGmailDraft, getGmailProfile } from '@/lib/gmail/drafts'
-import { logEmailEngagement } from '@/lib/hubspot/client'
 
 export interface InboundEmailProcessResult {
   emailId: string
@@ -97,13 +96,10 @@ export async function processInboundEmail(
     const { data: senderUser } = await supabase.from('users').select('name').eq('id', senderUserId).single()
     const fromName = senderUser?.name || 'Darkroom'
 
-    const isHighValue = enrollment.is_high_value as boolean
     const contactEmail = enrollment.contact_email as string
 
-    // Draft mode by default. Set AUTO_SEND_EMAILS=true in Vercel env to auto-send.
-    const autoSend = process.env.AUTO_SEND_EMAILS === 'true'
-
-    // Always create a Gmail draft (for review before sending)
+    // Inbound contacts always get a Gmail draft — they reached out, so a human
+    // should review and send. No auto-send path for inbound.
     const draftId = await createGmailDraft({
       userId: senderUserId,
       to: contactEmail,
@@ -119,38 +115,6 @@ export async function processInboundEmail(
       generated_subject: subject,
       generated_body: body,
     }).eq('id', emailId)
-
-    // If auto-send is enabled AND this is not a high-value account, send immediately
-    if (autoSend && !isHighValue) {
-      const messageId = await sendGmailEmail({
-        userId: senderUserId,
-        to: contactEmail,
-        subject,
-        body,
-        fromName,
-        fromEmail,
-      })
-
-      const sentAt = new Date().toISOString()
-
-      await logEmailEngagement({
-        hubspotContactId: enrollment.hubspot_contact_id as string | null,
-        toEmail: contactEmail,
-        subject,
-        body,
-        sentAt: new Date(sentAt),
-      }).catch(() => null)
-
-      await supabase.from('inbound_emails').update({
-        status: 'sent',
-        gmail_message_id: messageId,
-        generated_subject: subject,
-        generated_body: body,
-        sent_at: sentAt,
-      }).eq('id', emailId)
-
-      return { emailId, status: 'sent' }
-    }
 
     return { emailId, status: 'draft' }
   } catch (err) {

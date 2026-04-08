@@ -1,16 +1,16 @@
 /**
  * Inbound enrollment logic.
  *
+ * Inbound contacts have already reached out — no fit research needed.
  * Flow for a new HubSpot form submission:
- * 1. Research the company with Claude
- * 2. Find or note the HubSpot contact ID
+ * 1. Get the active inbound sequence
+ * 2. Find the HubSpot contact ID (for engagement logging)
  * 3. Create an inbound_enrollment record
  * 4. Schedule inbound_emails for each step
- * 5. Process day-0 email immediately (send or draft based on high-value status)
+ * 5. Process day-0 email immediately (creates Gmail draft)
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { assessCompany } from '@/lib/research/assess'
 import { findContactByEmail } from '@/lib/hubspot/client'
 import { processInboundEmail } from './process-emails'
 
@@ -52,27 +52,21 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
     .from('inbound_sequence_steps')
     .select('id, step_number, day_offset, step_type')
     .eq('sequence_id', sequence.id)
-    .eq('step_type', 'email') // only schedule email steps
+    .eq('step_type', 'email')
     .order('step_number', { ascending: true })
 
   if (stepsErr || !steps || steps.length === 0) {
     throw new Error('Inbound sequence has no email steps configured.')
   }
 
-  // 3. Research the company
-  const research = await assessCompany({
-    companyName: payload.company_name || 'Unknown Company',
-    mediaBudget: payload.media_budget,
-  })
-
-  // 4. Find HubSpot contact ID
+  // 3. Find HubSpot contact ID (for engagement logging)
   const hubspotContactId = payload.contact_email
     ? await findContactByEmail(payload.contact_email).catch(() => null)
     : null
 
   const enrolledAt = new Date()
 
-  // 5. Create enrollment record
+  // 4. Create enrollment record — all inbound contacts are enrolled, drafts always
   const { data: enrollment, error: enrollErr } = await supabase
     .from('inbound_enrollments')
     .insert({
@@ -86,10 +80,8 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
       inquiry_type: payload.inquiry_type || null,
       referrer: payload.referrer || null,
       page_url: payload.page_url || null,
-      status: research.is_good_fit ? (research.is_high_value ? 'draft_review' : 'active') : 'active',
-      is_high_value: research.is_high_value,
-      high_value_reason: research.is_high_value ? research.fit_reason : null,
-      research_summary: research.summary,
+      status: 'active',
+      is_high_value: false,
       hubspot_contact_id: hubspotContactId,
       enrolled_at: enrolledAt.toISOString(),
     })
@@ -102,7 +94,7 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
 
   const enrollmentId = enrollment.id
 
-  // 6. Schedule inbound_emails for each step
+  // 5. Schedule inbound_emails for each step
   const today = enrolledAt.toISOString().split('T')[0]
 
   const emailRows = steps.map((step) => {
@@ -118,14 +110,8 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
 
   await supabase.from('inbound_emails').insert(emailRows)
 
-  // 7. Process day-0 email immediately
-  const day0Email = emailRows.find((e) => {
-    const step = steps.find((s) => s.id === e.step_id)
-    return step?.day_offset === 0
-  })
-
-  if (day0Email && sequence.sender_user_id) {
-    // Get the newly created email row ID
+  // 6. Process day-0 email immediately (creates Gmail draft)
+  if (sequence.sender_user_id) {
     const { data: day0Row } = await supabase
       .from('inbound_emails')
       .select('id')
@@ -142,6 +128,6 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
 
   return {
     enrollmentId,
-    isHighValue: research.is_high_value,
+    isHighValue: false,
   }
 }
