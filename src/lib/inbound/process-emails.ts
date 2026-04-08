@@ -100,27 +100,28 @@ export async function processInboundEmail(
     const isHighValue = enrollment.is_high_value as boolean
     const contactEmail = enrollment.contact_email as string
 
-    if (isHighValue) {
-      // Create Gmail draft for manual review
-      const draftId = await createGmailDraft({
-        userId: senderUserId,
-        to: contactEmail,
-        subject,
-        body,
-        fromName,
-        fromEmail,
-      })
+    // Draft mode by default. Set AUTO_SEND_EMAILS=true in Vercel env to auto-send.
+    const autoSend = process.env.AUTO_SEND_EMAILS === 'true'
 
-      await supabase.from('inbound_emails').update({
-        status: 'draft',
-        gmail_draft_id: draftId,
-        generated_subject: subject,
-        generated_body: body,
-      }).eq('id', emailId)
+    // Always create a Gmail draft (for review before sending)
+    const draftId = await createGmailDraft({
+      userId: senderUserId,
+      to: contactEmail,
+      subject,
+      body,
+      fromName,
+      fromEmail,
+    })
 
-      return { emailId, status: 'draft' }
-    } else {
-      // Send immediately
+    await supabase.from('inbound_emails').update({
+      status: 'draft',
+      gmail_draft_id: draftId,
+      generated_subject: subject,
+      generated_body: body,
+    }).eq('id', emailId)
+
+    // If auto-send is enabled AND this is not a high-value account, send immediately
+    if (autoSend && !isHighValue) {
       const messageId = await sendGmailEmail({
         userId: senderUserId,
         to: contactEmail,
@@ -132,8 +133,7 @@ export async function processInboundEmail(
 
       const sentAt = new Date().toISOString()
 
-      // Log to HubSpot
-      const hubspotEngagementId = await logEmailEngagement({
+      await logEmailEngagement({
         hubspotContactId: enrollment.hubspot_contact_id as string | null,
         toEmail: contactEmail,
         subject,
@@ -144,7 +144,6 @@ export async function processInboundEmail(
       await supabase.from('inbound_emails').update({
         status: 'sent',
         gmail_message_id: messageId,
-        hubspot_engagement_id: hubspotEngagementId,
         generated_subject: subject,
         generated_body: body,
         sent_at: sentAt,
@@ -152,6 +151,8 @@ export async function processInboundEmail(
 
       return { emailId, status: 'sent' }
     }
+
+    return { emailId, status: 'draft' }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'Unknown error'
     await supabase.from('inbound_emails').update({

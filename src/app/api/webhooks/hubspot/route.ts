@@ -25,6 +25,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { enrollInboundContact } from '@/lib/inbound/enroll'
 
+// Zapier connection test sends GET — respond with 200 to confirm the endpoint is alive
+export async function GET() {
+  return NextResponse.json({ ok: true, endpoint: 'hubspot-webhook' })
+}
+
 function verifyWebhookSecret(req: NextRequest): boolean {
   const auth = req.headers.get('authorization')
   const secret = process.env.HUBSPOT_WEBHOOK_SECRET
