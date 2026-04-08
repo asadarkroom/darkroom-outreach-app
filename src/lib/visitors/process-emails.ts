@@ -45,9 +45,9 @@ export async function processVisitorEmail(
     return { emailId, status: 'error', error: 'Email record not found' }
   }
 
-  const enrollment = email.visitor_enrollments as Record<string, unknown>
-  const sequence = enrollment.visitor_sequences as Record<string, unknown>
-  const step = email.visitor_sequence_steps as Record<string, unknown>
+  const enrollment = email.visitor_enrollments as unknown as Record<string, unknown>
+  const sequence = enrollment.visitor_sequences as unknown as Record<string, unknown>
+  const step = email.visitor_sequence_steps as unknown as Record<string, unknown>
 
   if (email.status !== 'pending') {
     return { emailId, status: email.status as 'sent' | 'draft' | 'error' }
