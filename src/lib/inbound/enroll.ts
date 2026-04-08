@@ -34,8 +34,8 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
 }> {
   const supabase = createAdminClient()
 
-  // 1. Get the active inbound sequence
-  const { data: sequence, error: seqErr } = await supabase
+  // 1. Get the active inbound sequence (may not exist yet)
+  const { data: sequence } = await supabase
     .from('inbound_sequences')
     .select('id, sender_user_id, system_prompt')
     .eq('is_active', true)
@@ -43,11 +43,44 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
     .limit(1)
     .single()
 
-  if (seqErr || !sequence) {
-    throw new Error('No active inbound sequence found. Please create one at /inbound/sequences.')
+  // 2. Find HubSpot contact ID (for engagement logging)
+  const hubspotContactId = payload.contact_email
+    ? await findContactByEmail(payload.contact_email).catch(() => null)
+    : null
+
+  const enrolledAt = new Date()
+
+  // If no active sequence, still record the lead as unenrolled so it's tracked
+  if (!sequence) {
+    const { data: enrollment, error: enrollErr } = await supabase
+      .from('inbound_enrollments')
+      .insert({
+        sequence_id: null,
+        contact_name: payload.contact_name,
+        contact_email: payload.contact_email,
+        contact_phone: payload.contact_phone || null,
+        company_name: payload.company_name || null,
+        services_interested: payload.services_interested || null,
+        media_budget: payload.media_budget || null,
+        inquiry_type: payload.inquiry_type || null,
+        referrer: payload.referrer || null,
+        page_url: payload.page_url || null,
+        status: 'unenrolled',
+        is_high_value: false,
+        hubspot_contact_id: hubspotContactId,
+        enrolled_at: enrolledAt.toISOString(),
+      })
+      .select('id')
+      .single()
+
+    if (enrollErr || !enrollment) {
+      throw new Error(`Failed to record unenrolled lead: ${enrollErr?.message}`)
+    }
+
+    return { enrollmentId: enrollment.id, isHighValue: false, skipped: true, reason: 'No active inbound sequence' }
   }
 
-  // 2. Get sequence steps
+  // 3. Get sequence steps
   const { data: steps, error: stepsErr } = await supabase
     .from('inbound_sequence_steps')
     .select('id, step_number, day_offset, step_type')
@@ -58,13 +91,6 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
   if (stepsErr || !steps || steps.length === 0) {
     throw new Error('Inbound sequence has no email steps configured.')
   }
-
-  // 3. Find HubSpot contact ID (for engagement logging)
-  const hubspotContactId = payload.contact_email
-    ? await findContactByEmail(payload.contact_email).catch(() => null)
-    : null
-
-  const enrolledAt = new Date()
 
   // 4. Create enrollment record — all inbound contacts are enrolled, drafts always
   const { data: enrollment, error: enrollErr } = await supabase
