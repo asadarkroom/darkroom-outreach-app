@@ -46,9 +46,9 @@ export async function processInboundEmail(
     return { emailId, status: 'error', error: 'Email record not found' }
   }
 
-  const enrollment = email.inbound_enrollments as Record<string, unknown>
-  const sequence = enrollment.inbound_sequences as Record<string, unknown>
-  const step = email.inbound_sequence_steps as Record<string, unknown>
+  const enrollment = email.inbound_enrollments as unknown as Record<string, unknown>
+  const sequence = enrollment.inbound_sequences as unknown as Record<string, unknown>
+  const step = email.inbound_sequence_steps as unknown as Record<string, unknown>
 
   // Only process pending emails for active (or draft_review) enrollments
   if (email.status !== 'pending') {
