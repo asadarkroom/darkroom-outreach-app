@@ -10,6 +10,25 @@ interface CreateDraftParams {
   fromEmail: string
 }
 
+/**
+ * Converts a plain text email body to minimal HTML.
+ * Double newlines become paragraph breaks; single newlines become <br>.
+ * This prevents Gmail from auto-wrapping plain text at 76 chars and
+ * allows proper editing in Gmail's rich-text compose window.
+ */
+export function plainTextToHtml(text: string): string {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const escaped = normalized
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const body = escaped
+    .split(/\n{2,}/)
+    .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  return `<html><body>${body}</body></html>`
+}
+
 export async function createGmailDraft(params: CreateDraftParams): Promise<string> {
   const { userId, to, subject, body, fromName, fromEmail } = params
 
@@ -17,12 +36,13 @@ export async function createGmailDraft(params: CreateDraftParams): Promise<strin
   const gmail = google.gmail({ version: 'v1', auth })
 
   const message = [
+    'MIME-Version: 1.0',
     `From: ${fromName} <${fromEmail}>`,
     `To: ${to}`,
     `Subject: ${subject}`,
-    'Content-Type: text/plain; charset=utf-8',
+    'Content-Type: text/html; charset=utf-8',
     '',
-    body,
+    plainTextToHtml(body),
   ].join('\r\n')
 
   const encoded = Buffer.from(message).toString('base64url')

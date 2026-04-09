@@ -5,6 +5,7 @@
 
 import { google } from 'googleapis'
 import { getAuthenticatedClient } from './client'
+import { plainTextToHtml } from './drafts'
 
 interface SendEmailParams {
   userId: string
@@ -28,11 +29,11 @@ export async function sendGmailEmail(params: SendEmailParams): Promise<string> {
   const gmail = google.gmail({ version: 'v1', auth })
 
   const headers = [
+    'MIME-Version: 1.0',
     `From: ${fromName} <${fromEmail}>`,
     `To: ${to}`,
     `Subject: ${subject}`,
-    'Content-Type: text/plain; charset=utf-8',
-    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=utf-8',
   ]
 
   if (inReplyTo) {
@@ -40,7 +41,7 @@ export async function sendGmailEmail(params: SendEmailParams): Promise<string> {
     headers.push(`References: ${inReplyTo}`)
   }
 
-  const message = [...headers, '', body].join('\r\n')
+  const message = [...headers, '', plainTextToHtml(body)].join('\r\n')
   const encoded = Buffer.from(message).toString('base64url')
 
   const requestBody: { raw: string; threadId?: string } = { raw: encoded }
