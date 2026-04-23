@@ -36,7 +36,7 @@ export async function generateDraftsForDate(
     .from('scheduled_emails')
     .select(SCHEDULED_EMAIL_SELECT)
     .eq('send_date', date)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'error'])
 
   if (campaignId) query = query.eq('campaign_id', campaignId)
 
