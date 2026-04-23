@@ -38,29 +38,39 @@ export async function assessCompany(params: {
     .join('\n')
 
   const prompt = `
-You are a business analyst helping assess whether companies are good prospects for Darkroom, a performance marketing agency.
+You are a business analyst helping assess whether companies are good prospects for Darkroom, a full-service performance marketing agency specializing in paid media, creative, TikTok, Amazon, and lifecycle marketing for consumer brands.
 
-Darkroom's ideal client profile:
-- DTC consumer brands and ecommerce companies
-- Product brands selling direct, via retail, or Amazon
-- Companies with meaningful paid media spend needing performance creative, lifecycle marketing, or full-funnel growth
-- Successful scale-ups like Airbnb, Spotify, etc. also qualify
-- NOT a fit: universities, government, nonprofits, professional services, B2B SaaS with no consumer product
+GOOD FIT — say is_good_fit: true for:
+- DTC consumer brands (beauty, wellness, food/bev, apparel, home, pet, etc.)
+- Ecommerce brands selling on their own site, Amazon, TikTok Shop, or retail
+- Consumer product companies at any stage that run paid ads (Meta, TikTok, Google, Amazon)
+- Established consumer brands like Lancôme, Cole Haan, Force of Nature, Primal Kitchen, Graza, Spotify
+- Venture-backed consumer startups with ad spend
+- Retail brands with digital marketing operations
+- Multi-location consumer-facing businesses (restaurants, fitness, etc.)
 
-HIGH VALUE client criteria (requires draft review instead of auto-send):
-- Consumer brands doing >$20M in annual revenue, OR
-- Companies with >$50,000/month in advertising spend/budget
+NOT a fit — say is_good_fit: false for:
+- Universities, schools, or educational institutions
+- Government agencies or nonprofits
+- Pure B2B companies with no consumer product (law firms, accounting, industrial)
+- Financial services (banks, hedge funds, private equity) unless they have a consumer product
+- Healthcare systems or hospitals (unless selling direct consumer products)
+
+WHEN IN DOUBT — lean toward is_good_fit: true. It is much better to draft an email for a borderline case than to silently skip a good prospect.
+
+HIGH VALUE (is_high_value: true):
+- Consumer brands doing >$20M in annual revenue, OR >$50k/month ad spend
 
 Company to evaluate:
 ${contextLines}
 
-Based on your knowledge of this company, provide a JSON response (no markdown, just raw JSON):
+Respond with ONLY raw JSON (no markdown, no code fences):
 {
-  "summary": "2-3 sentences describing what the company does, their stage/size, and their relevance to Darkroom",
+  "summary": "2-3 sentences: what they do, their stage/size, why they are or are not a Darkroom fit",
   "is_good_fit": true or false,
   "is_high_value": true or false,
   "fit_reason": "1 sentence explaining the fit decision",
-  "confidence": "high", "medium", or "low" (low = company is unfamiliar or hard to assess)
+  "confidence": "high", "medium", or "low"
 }
 `.trim()
 
@@ -79,12 +89,12 @@ Based on your knowledge of this company, provide a JSON response (no markdown, j
     return parsed
   } catch (err) {
     console.error('Research assess error:', err)
-    // Fall back to uncertain result so we don't block enrollment
+    // Default to good_fit so we don't silently skip prospects on research failures
     return {
-      summary: `Unable to research ${companyName} automatically. Manual review recommended.`,
-      is_good_fit: false,
+      summary: `Research unavailable for ${companyName}. Defaulting to draft — review before sending.`,
+      is_good_fit: true,
       is_high_value: false,
-      fit_reason: 'Research failed — defaulting to skip.',
+      fit_reason: 'Research failed — defaulting to include. Verify manually.',
       confidence: 'low',
     }
   }

@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Mail, Send, Clock, CheckCircle, AlertTriangle, FileText } from 'lucide-react'
+import { ArrowLeft, Mail, Send, Clock, CheckCircle, AlertTriangle, FileText, ExternalLink } from 'lucide-react'
 
 interface Email {
   id: string
@@ -60,7 +60,7 @@ export default function VisitorEnrollmentPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
     fetch(`/api/visitors/enrollments/${id}`)
-      .then(r => { if (!r.ok) { router.push('/web-visitors'); return null; } return r.json(); })
+      .then(r => { if (!r.ok) { router.push('/web-visitors'); return null } return r.json() })
       .then(d => {
         if (!d) return
         setEnrollment(d.enrollment)
@@ -80,6 +80,10 @@ export default function VisitorEnrollmentPage({ params }: { params: Promise<{ id
   const fitLabels: Record<string, string> = {
     good_fit: 'Good Fit', not_fit: 'Not a Fit',
     existing_deal: 'Existing Deal', uncertain: 'Uncertain',
+  }
+  const fitColors: Record<string, string> = {
+    good_fit: 'text-green-400', not_fit: 'text-red-400',
+    existing_deal: 'text-blue-400', uncertain: 'text-yellow-400',
   }
 
   return (
@@ -134,7 +138,7 @@ export default function VisitorEnrollmentPage({ params }: { params: Promise<{ id
             <div className="space-y-1.5">
               <p className="text-xs">
                 <span className="text-gray-500">Fit: </span>
-                <span className={enrollment.fit_assessment === 'good_fit' ? 'text-green-400' : 'text-gray-400'}>
+                <span className={fitColors[enrollment.fit_assessment || ''] || 'text-gray-400'}>
                   {fitLabels[enrollment.fit_assessment || ''] || '—'}
                 </span>
               </p>
@@ -168,8 +172,8 @@ export default function VisitorEnrollmentPage({ params }: { params: Promise<{ id
           ) : (
             emails.map(email => (
               <div key={email.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                <button
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors text-left"
+                <div
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors cursor-pointer"
                   onClick={() => setExpanded(expanded === email.id ? null : email.id)}
                 >
                   <EmailStatusIcon status={email.status} />
@@ -182,25 +186,50 @@ export default function VisitorEnrollmentPage({ params }: { params: Promise<{ id
                         ? `Sent ${new Date(email.sent_at).toLocaleString()}`
                         : `Scheduled ${new Date(email.send_date).toLocaleDateString()}`}
                     </p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded ${
-                    email.status === 'sent' ? 'bg-green-900/50 text-green-400' :
-                    email.status === 'draft' ? 'bg-yellow-900/50 text-yellow-400' :
-                    email.status === 'error' ? 'bg-red-900/50 text-red-400' :
-                    'bg-gray-800 text-gray-400'
-                  }`}>
-                    {email.status}
-                  </span>
-                </button>
-                {expanded === email.id && email.generated_body && (
-                  <div className="border-t border-gray-800 px-4 py-3">
-                    <pre className="text-xs text-gray-400 whitespace-pre-wrap font-sans leading-relaxed">
-                      {email.generated_body}
-                    </pre>
-                    {email.error_message && (
-                      <p className="mt-2 text-xs text-red-400 bg-red-900/20 rounded p-2">
-                        Error: {email.error_message}
+                    {email.status === 'error' && (
+                      <p className="text-xs text-red-400 mt-0.5 truncate">
+                        {email.error_message || 'Error — click to see details'}
                       </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    {(email.status === 'draft' || email.status === 'sent') && email.gmail_draft_id && (
+                      <a
+                        href="https://mail.google.com/mail/u/0/#drafts"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-400 rounded border border-indigo-800/50 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Gmail
+                      </a>
+                    )}
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      email.status === 'sent' ? 'bg-green-900/50 text-green-400' :
+                      email.status === 'draft' ? 'bg-yellow-900/50 text-yellow-400' :
+                      email.status === 'error' ? 'bg-red-900/50 text-red-400' :
+                      email.status === 'cancelled' ? 'bg-gray-800 text-gray-500' :
+                      'bg-gray-800 text-gray-400'
+                    }`}>
+                      {email.status}
+                    </span>
+                  </div>
+                </div>
+
+                {expanded === email.id && (
+                  <div className="border-t border-gray-800 px-4 py-3 space-y-3">
+                    {email.status === 'error' && (
+                      <div className="bg-red-900/20 border border-red-800/40 rounded p-3 space-y-1">
+                        <p className="text-xs font-semibold text-red-400">Error details</p>
+                        <p className="text-xs text-red-300">
+                          {email.error_message || 'No error message saved. This likely happened before error logging was added.'}
+                        </p>
+                      </div>
+                    )}
+                    {email.generated_body && (
+                      <pre className="text-xs text-gray-400 whitespace-pre-wrap font-sans leading-relaxed">
+                        {email.generated_body}
+                      </pre>
                     )}
                   </div>
                 )}

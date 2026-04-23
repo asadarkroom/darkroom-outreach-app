@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { renderTemplate } from '@/lib/claude/personalize'
 import { createGmailDraft, getGmailProfile } from '@/lib/gmail/drafts'
 import { GmailNotConnectedError, GmailTokenExpiredError } from '@/lib/gmail/client'
+import { checkDealExists } from '@/lib/hubspot/client'
 import type { Contact } from '@/lib/supabase/types'
 
 interface GenerateResult {
@@ -35,7 +36,7 @@ export async function generateDraftsForDate(
     .from('scheduled_emails')
     .select(SCHEDULED_EMAIL_SELECT)
     .eq('send_date', date)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'error'])
 
   if (campaignId) query = query.eq('campaign_id', campaignId)
 
@@ -54,6 +55,19 @@ export async function generateDraftsForDate(
       console.warn(`Skipping email ${raw.id} — contact has no email`)
       results.skipped++
       continue
+    }
+
+    // Skip contacts with an existing HubSpot deal
+    if (contact.company_name) {
+      const dealExists = await checkDealExists(contact.company_name).catch(() => false)
+      if (dealExists) {
+        await supabase.from('scheduled_emails').update({
+          status: 'skipped',
+          error_message: `Existing HubSpot deal for "${contact.company_name}" — skipped`,
+        }).eq('id', raw.id)
+        results.skipped++
+        continue
+      }
     }
 
     try {
@@ -152,6 +166,19 @@ export async function generateDraftsDue(
     if (!contact.email) {
       results.skipped++
       continue
+    }
+
+    // Skip contacts with an existing HubSpot deal
+    if (contact.company_name) {
+      const dealExists = await checkDealExists(contact.company_name).catch(() => false)
+      if (dealExists) {
+        await supabase.from('scheduled_emails').update({
+          status: 'skipped',
+          error_message: `Existing HubSpot deal for "${contact.company_name}" — skipped`,
+        }).eq('id', raw.id)
+        results.skipped++
+        continue
+      }
     }
 
     try {

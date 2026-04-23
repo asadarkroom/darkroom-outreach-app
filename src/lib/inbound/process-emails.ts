@@ -49,8 +49,8 @@ export async function processInboundEmail(
   const sequence = enrollment.inbound_sequences as unknown as Record<string, unknown>
   const step = email.inbound_sequence_steps as unknown as Record<string, unknown>
 
-  // Only process pending emails for active (or draft_review) enrollments
-  if (email.status !== 'pending') {
+  // Only process pending or errored emails — skip sent/draft/cancelled
+  if (email.status !== 'pending' && email.status !== 'error') {
     return { emailId, status: email.status as 'sent' | 'draft' | 'error' }
   }
 
@@ -141,7 +141,7 @@ export async function processInboundEmailsDue(upToDate: string): Promise<{
   const { data: dueEmails, error } = await supabase
     .from('inbound_emails')
     .select('id')
-    .eq('status', 'pending')
+    .in('status', ['pending', 'error'])
     .lte('send_date', upToDate)
 
   if (error || !dueEmails) {

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/options'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateDraftsForDate } from '@/lib/drafts/generate'
+import { checkDealExists } from '@/lib/hubspot/client'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -63,11 +64,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const scheduledEmailRows = []
   const contactUpdates = []
+  let skippedDeal = 0
 
   for (const contact of contacts) {
     if (!contact.email) {
       console.warn(`Skipping contact ${contact.id} — no email address`)
       continue
+    }
+
+    // Skip contacts whose company already has an active HubSpot deal
+    if (contact.company_name) {
+      const dealExists = await checkDealExists(contact.company_name).catch(() => false)
+      if (dealExists) {
+        console.warn(`Skipping contact ${contact.id} (${contact.company_name}) — existing HubSpot deal`)
+        skippedDeal++
+        continue
+      }
     }
 
     contactUpdates.push({
@@ -136,6 +148,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({
     success: true,
     enrolled: contactUpdates.length,
+    skipped_existing_deal: skippedDeal,
     scheduled: scheduledEmailRows.length,
     drafts: draftResults,
   })
