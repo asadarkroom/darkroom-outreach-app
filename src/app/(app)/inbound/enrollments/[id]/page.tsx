@@ -173,8 +173,9 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
           ) : (
             emails.map((email) => (
               <div key={email.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                <button
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors text-left"
+                {/* Row — div not button so we can nest action buttons inside */}
+                <div
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors cursor-pointer"
                   onClick={() => setExpandedEmail(expandedEmail === email.id ? null : email.id)}
                 >
                   <EmailStatusIcon status={email.status} />
@@ -187,17 +188,18 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                         ? `Sent ${new Date(email.sent_at).toLocaleString()}`
                         : `Scheduled ${new Date(email.send_date).toLocaleDateString()}`}
                     </p>
-                    {email.status === 'error' && email.error_message && (
-                      <p className="text-xs text-red-400 mt-0.5 truncate">{email.error_message}</p>
+                    {email.status === 'error' && (
+                      <p className="text-xs text-red-400 mt-0.5 truncate">
+                        {email.error_message || 'Error — click to see details'}
+                      </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
                     {(email.status === 'draft' || email.status === 'sent') && email.gmail_draft_id && (
                       <a
                         href="https://mail.google.com/mail/u/0/#drafts"
                         target="_blank"
                         rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-400 rounded border border-indigo-800/50 transition-colors"
                       >
                         <ExternalLink className="w-3 h-3" />
@@ -206,7 +208,7 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                     )}
                     {email.status === 'error' && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); retry(email.id) }}
+                        onClick={() => retry(email.id)}
                         disabled={retrying === email.id}
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-red-900/40 hover:bg-red-900/70 text-red-400 rounded border border-red-800/50 transition-colors disabled:opacity-50"
                       >
@@ -224,14 +226,24 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                       {email.status}
                     </span>
                   </div>
-                </button>
+                </div>
 
                 {expandedEmail === email.id && (
                   <div className="border-t border-gray-800 px-4 py-3 space-y-3">
-                    {email.error_message && (
-                      <div className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded p-3">
-                        <p className="font-medium mb-1">Error</p>
-                        <p>{email.error_message}</p>
+                    {email.status === 'error' && (
+                      <div className="bg-red-900/20 border border-red-800/40 rounded p-3 space-y-2">
+                        <p className="text-xs font-semibold text-red-400">Error details</p>
+                        <p className="text-xs text-red-300">
+                          {email.error_message || 'No error message saved. This likely happened before error logging was added. Click Retry to attempt again.'}
+                        </p>
+                        <button
+                          onClick={() => retry(email.id)}
+                          disabled={retrying === email.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-red-700 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${retrying === email.id ? 'animate-spin' : ''}`} />
+                          {retrying === email.id ? 'Retrying…' : 'Retry now'}
+                        </button>
                       </div>
                     )}
                     {email.generated_body && (
