@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import Link from 'next/link'
 import {
   Users, Mail, CheckCircle, Clock, XCircle, Download,
@@ -289,9 +289,8 @@ export default function WebVisitorsPage() {
             </thead>
             <tbody className="divide-y divide-gray-800/50">
               {enrollments.map(e => (
-                <>
+                <Fragment key={e.id}>
                   <tr
-                    key={e.id}
                     className="hover:bg-gray-800/30 transition-colors cursor-pointer"
                     onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
                   >
@@ -326,13 +325,13 @@ export default function WebVisitorsPage() {
                     </td>
                   </tr>
                   {expandedRow === e.id && e.research_summary && (
-                    <tr key={`${e.id}-research`} className="bg-gray-800/20">
+                    <tr className="bg-gray-800/20">
                       <td colSpan={7} className="px-10 py-3 border-t border-gray-800/50">
                         <p className="text-xs text-gray-400 leading-relaxed">{e.research_summary}</p>
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
