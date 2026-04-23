@@ -192,6 +192,18 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {(email.status === 'draft' || email.status === 'sent') && email.gmail_draft_id && (
+                      <a
+                        href="https://mail.google.com/mail/u/0/#drafts"
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-400 rounded border border-indigo-800/50 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Gmail
+                      </a>
+                    )}
                     {email.status === 'error' && (
                       <button
                         onClick={(e) => { e.stopPropagation(); retry(email.id) }}

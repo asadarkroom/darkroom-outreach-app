@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Users, Mail, CheckCircle, Clock, XCircle, Download,
-  RefreshCw, Settings, Play, AlertTriangle,
+  RefreshCw, Settings, Play, AlertTriangle, ChevronDown, ChevronRight,
 } from 'lucide-react'
 
 interface VisitorStats {
@@ -98,6 +98,7 @@ export default function WebVisitorsPage() {
   const [processing, setProcessing] = useState(false)
   const [processResult, setProcessResult] = useState<string>('')
   const [refreshing, setRefreshing] = useState(false)
+  const [expandedRow, setExpandedRow] = useState<string | null>(null)
 
   async function load() {
     setRefreshing(true)
@@ -288,27 +289,50 @@ export default function WebVisitorsPage() {
             </thead>
             <tbody className="divide-y divide-gray-800/50">
               {enrollments.map(e => (
-                <tr key={e.id} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-white">{e.contact_name}</p>
-                    <p className="text-gray-500 text-xs">{e.contact_email || 'No email'}</p>
-                  </td>
-                  <td className="px-4 py-3 text-gray-300">{e.company_name || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{e.industry || '—'}</td>
-                  <td className="px-4 py-3"><FitBadge fit={e.fit_assessment} /></td>
-                  <td className="px-4 py-3"><StatusBadge status={e.status} /></td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {new Date(e.enrolled_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/web-visitors/enrollments/${e.id}`}
-                      className="text-indigo-400 hover:text-indigo-300 text-xs font-medium"
-                    >
-                      View →
-                    </Link>
-                  </td>
-                </tr>
+                <>
+                  <tr
+                    key={e.id}
+                    className="hover:bg-gray-800/30 transition-colors cursor-pointer"
+                    onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        {e.research_summary
+                          ? expandedRow === e.id
+                            ? <ChevronDown className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                            : <ChevronRight className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                          : <span className="w-3 h-3 flex-shrink-0" />
+                        }
+                        <div>
+                          <p className="font-medium text-white">{e.contact_name}</p>
+                          <p className="text-gray-500 text-xs">{e.contact_email || 'No email'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-300">{e.company_name || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{e.industry || '—'}</td>
+                    <td className="px-4 py-3"><FitBadge fit={e.fit_assessment} /></td>
+                    <td className="px-4 py-3"><StatusBadge status={e.status} /></td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">
+                      {new Date(e.enrolled_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right" onClick={ev => ev.stopPropagation()}>
+                      <Link
+                        href={`/web-visitors/enrollments/${e.id}`}
+                        className="text-indigo-400 hover:text-indigo-300 text-xs font-medium"
+                      >
+                        View →
+                      </Link>
+                    </td>
+                  </tr>
+                  {expandedRow === e.id && e.research_summary && (
+                    <tr key={`${e.id}-research`} className="bg-gray-800/20">
+                      <td colSpan={7} className="px-10 py-3 border-t border-gray-800/50">
+                        <p className="text-xs text-gray-400 leading-relaxed">{e.research_summary}</p>
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>

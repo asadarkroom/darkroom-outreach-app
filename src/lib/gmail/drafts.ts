@@ -70,6 +70,42 @@ export async function getGmailProfile(userId: string): Promise<{ email: string }
 }
 
 /**
+ * Check whether a Gmail draft still exists.
+ * Returns 'draft' if still pending, 'sent' if it's been sent (moved to Sent),
+ * or null if the draft was deleted without sending.
+ */
+export async function checkDraftStatus(
+  userId: string,
+  draftId: string
+): Promise<'draft' | 'sent' | 'deleted' | null> {
+  try {
+    const auth = await getAuthenticatedClient(userId)
+    const gmail = google.gmail({ version: 'v1', auth })
+
+    // Try to fetch the draft — if it's gone, it was sent or deleted
+    let messageId: string | null = null
+    try {
+      const draft = await gmail.users.drafts.get({ userId: 'me', id: draftId, format: 'minimal' })
+      messageId = draft.data.message?.id || null
+    } catch {
+      // Draft not found — check sent folder for a recently sent message
+      return 'deleted'
+    }
+
+    if (!messageId) return 'draft'
+
+    // Check label on the underlying message
+    const msg = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'minimal' })
+    const labels = msg.data.labelIds || []
+
+    if (labels.includes('SENT') && !labels.includes('DRAFT')) return 'sent'
+    return 'draft'
+  } catch {
+    return null
+  }
+}
+
+/**
  * Search for replies from a specific sender in the user's mailbox.
  * Returns true if any reply is found.
  */
