@@ -12,17 +12,30 @@ interface CreateDraftParams {
 
 /**
  * Converts a plain text email body to minimal HTML.
+ * Supports markdown-style links [text](url) → clickable anchors.
  * Double newlines become paragraph breaks; single newlines become <br>.
- * This prevents Gmail from auto-wrapping plain text at 76 chars and
- * allows proper editing in Gmail's rich-text compose window.
  */
 export function plainTextToHtml(text: string): string {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const escaped = normalized
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  const body = escaped
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  }
+
+  // Convert [link text](url) to <a> tags before HTML-escaping the rest
+  const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g
+  let processed = ''
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = linkRegex.exec(normalized)) !== null) {
+    processed += escapeHtml(normalized.slice(lastIndex, match.index))
+    processed += `<a href="${match[2]}" target="_blank" rel="noreferrer">${escapeHtml(match[1])}</a>`
+    lastIndex = match.index + match[0].length
+  }
+  processed += escapeHtml(normalized.slice(lastIndex))
+
+  const body = processed
     .split(/\n{2,}/)
     .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
     .join('')
