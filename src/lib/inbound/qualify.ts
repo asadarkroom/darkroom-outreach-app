@@ -45,7 +45,7 @@ export async function qualifyInboundLead(params: {
   const { contactName, companyName, servicesInterested, mediaBudget, inquiryType, pageUrl } = params
 
   const calendlyUrl = process.env.CALENDLY_URL || 'https://calendar.app.google/AfnPvHX9VWnc13Be7'
-  const agencyOverviewUrl = process.env.AGENCY_OVERVIEW_URL || ''
+  const agencyOverviewUrl = process.env.AGENCY_OVERVIEW_URL || 'https://darkroom.docsend.com/view/svxjbhtf2fdbnck4'
   const senderFullName = process.env.SENDER_NAME || 'Asa Juhlin'
   const senderFirstName = senderFullName.split(' ')[0]
   const senderTitle = process.env.SENDER_TITLE || 'Associate Director, Revenue Operations at Darkroom'
