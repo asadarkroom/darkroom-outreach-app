@@ -125,6 +125,7 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
 
   // Re-qualify
   const [qualifying, setQualifying] = useState(false)
+  const [pollCount, setPollCount] = useState(0)
 
   async function load() {
     const res = await fetch(`/api/inbound/enrollments/${id}`)
@@ -205,12 +206,15 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
 
   useEffect(() => { load() }, [id])
 
-  // Poll while unassessed so the page updates once qualification completes
+  // Poll while unassessed, but give up after 5 attempts (~20s)
   useEffect(() => {
-    if (!enrollment || enrollment.lead_tier !== 'unassessed') return
-    const timer = setTimeout(() => load(), 4000)
+    if (!enrollment || enrollment.lead_tier !== 'unassessed' || pollCount >= 5) return
+    const timer = setTimeout(() => {
+      setPollCount(c => c + 1)
+      load()
+    }, 4000)
     return () => clearTimeout(timer)
-  }, [enrollment?.lead_tier])
+  }, [enrollment?.lead_tier, pollCount])
 
   if (loading || !enrollment) {
     return (
@@ -401,6 +405,20 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                       Sends immediately from your connected Gmail
                     </p>
                   </div>
+                </div>
+              ) : pollCount >= 5 ? (
+                <div className="px-4 py-8 text-center">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">Qualification didn't complete.</p>
+                  <p className="text-xs text-gray-600 mt-1 mb-4">The database migration may not have run yet, or there was an API error.</p>
+                  <button
+                    onClick={reQualify}
+                    disabled={qualifying}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg mx-auto transition-colors disabled:opacity-50"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${qualifying ? 'animate-pulse' : ''}`} />
+                    {qualifying ? 'Running…' : 'Try Re-qualify'}
+                  </button>
                 </div>
               ) : (
                 <div className="px-4 py-8 text-center">
