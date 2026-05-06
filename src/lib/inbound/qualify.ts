@@ -47,7 +47,7 @@ export async function qualifyInboundLead(params: {
   const calendlyUrl = process.env.CALENDLY_URL || 'https://calendar.app.google/AfnPvHX9VWnc13Be7'
   const senderFullName = process.env.SENDER_NAME || 'Asa Juhlin'
   const senderFirstName = senderFullName.split(' ')[0]
-  const senderTitle = process.env.SENDER_TITLE || 'partnerships at Darkroom'
+  const senderTitle = process.env.SENDER_TITLE || 'Associate Director, Revenue Operations at Darkroom'
   const agencyName = 'Darkroom'
 
   const leadContext = [
