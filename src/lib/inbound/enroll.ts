@@ -1,18 +1,19 @@
 /**
  * Inbound enrollment logic.
  *
- * Inbound contacts have already reached out — no fit research needed.
  * Flow for a new HubSpot form submission:
  * 1. Get the active inbound sequence
  * 2. Find the HubSpot contact ID (for engagement logging)
  * 3. Create an inbound_enrollment record
- * 4. Schedule inbound_emails for each step
- * 5. Process day-0 email immediately (creates Gmail draft)
+ * 4. Run Claude qualification → tier, first response email, follow-up cadence
+ * 5. For not_fit: mark enrollment as disqualified, done
+ * 6. For good_fit / questionable: schedule follow-up sequence emails (day_offset > 0 only)
+ *    The day-0 first response is stored on the enrollment and sent from the app by the user
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { findContactByEmail } from '@/lib/hubspot/client'
-import { processInboundEmail } from './process-emails'
+import { qualifyInboundLead } from './qualify'
 
 export interface HubSpotFormPayload {
   contact_name: string
@@ -28,13 +29,13 @@ export interface HubSpotFormPayload {
 
 export async function enrollInboundContact(payload: HubSpotFormPayload): Promise<{
   enrollmentId: string
-  isHighValue: boolean
+  tier: string
   skipped?: boolean
   reason?: string
 }> {
   const supabase = createAdminClient()
 
-  // 1. Get the active inbound sequence (may not exist yet)
+  // 1. Get the active inbound sequence (optional — only needed for follow-up emails)
   const { data: sequence } = await supabase
     .from('inbound_sequences')
     .select('id, sender_user_id, system_prompt')
@@ -50,53 +51,11 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
 
   const enrolledAt = new Date()
 
-  // If no active sequence, still record the lead as unenrolled so it's tracked
-  if (!sequence) {
-    const { data: enrollment, error: enrollErr } = await supabase
-      .from('inbound_enrollments')
-      .insert({
-        sequence_id: null,
-        contact_name: payload.contact_name,
-        contact_email: payload.contact_email,
-        contact_phone: payload.contact_phone || null,
-        company_name: payload.company_name || null,
-        services_interested: payload.services_interested || null,
-        media_budget: payload.media_budget || null,
-        inquiry_type: payload.inquiry_type || null,
-        referrer: payload.referrer || null,
-        page_url: payload.page_url || null,
-        status: 'unenrolled',
-        is_high_value: false,
-        hubspot_contact_id: hubspotContactId,
-        enrolled_at: enrolledAt.toISOString(),
-      })
-      .select('id')
-      .single()
-
-    if (enrollErr || !enrollment) {
-      throw new Error(`Failed to record unenrolled lead: ${enrollErr?.message}`)
-    }
-
-    return { enrollmentId: enrollment.id, isHighValue: false, skipped: true, reason: 'No active inbound sequence' }
-  }
-
-  // 3. Get sequence steps
-  const { data: steps, error: stepsErr } = await supabase
-    .from('inbound_sequence_steps')
-    .select('id, step_number, day_offset, step_type')
-    .eq('sequence_id', sequence.id)
-    .eq('step_type', 'email')
-    .order('step_number', { ascending: true })
-
-  if (stepsErr || !steps || steps.length === 0) {
-    throw new Error('Inbound sequence has no email steps configured.')
-  }
-
-  // 4. Create enrollment record — all inbound contacts are enrolled, drafts always
+  // 3. Create enrollment record
   const { data: enrollment, error: enrollErr } = await supabase
     .from('inbound_enrollments')
     .insert({
-      sequence_id: sequence.id,
+      sequence_id: sequence?.id || null,
       contact_name: payload.contact_name,
       contact_email: payload.contact_email,
       contact_phone: payload.contact_phone || null,
@@ -120,10 +79,77 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
 
   const enrollmentId = enrollment.id
 
-  // 5. Schedule inbound_emails for each step
-  const today = enrolledAt.toISOString().split('T')[0]
+  // 4. Run qualification in background (don't block webhook response)
+  qualifyAndUpdate(enrollmentId, payload, sequence?.id || null).catch(err =>
+    console.error('Qualification error for enrollment', enrollmentId, err)
+  )
 
-  const emailRows = steps.map((step) => {
+  // 5. Schedule follow-up sequence emails (day_offset > 0 only) if sequence exists
+  if (sequence) {
+    await scheduleFollowUps(enrollmentId, sequence.id, enrolledAt)
+  }
+
+  return { enrollmentId, tier: 'unassessed' }
+}
+
+async function qualifyAndUpdate(
+  enrollmentId: string,
+  payload: HubSpotFormPayload,
+  sequenceId: string | null
+) {
+  const supabase = createAdminClient()
+
+  const result = await qualifyInboundLead({
+    contactName: payload.contact_name,
+    companyName: payload.company_name || null,
+    servicesInterested: payload.services_interested || null,
+    mediaBudget: payload.media_budget || null,
+    inquiryType: payload.inquiry_type || null,
+    pageUrl: payload.page_url || null,
+  })
+
+  const updates: Record<string, unknown> = {
+    lead_tier: result.tier,
+    research_summary: result.research_summary,
+    cadence_json: result.cadence,
+  }
+
+  if (result.first_response_subject) updates.first_response_subject = result.first_response_subject
+  if (result.first_response_body) updates.first_response_body = result.first_response_body
+  if (result.disqualify_reason) updates.disqualify_reason = result.disqualify_reason
+
+  if (result.tier === 'not_fit') {
+    updates.status = 'disqualified'
+    // Cancel any pending follow-up emails for disqualified leads
+    await supabase
+      .from('inbound_emails')
+      .update({ status: 'cancelled' })
+      .eq('enrollment_id', enrollmentId)
+      .eq('status', 'pending')
+  }
+
+  await supabase.from('inbound_enrollments').update(updates).eq('id', enrollmentId)
+}
+
+async function scheduleFollowUps(
+  enrollmentId: string,
+  sequenceId: string,
+  enrolledAt: Date
+) {
+  const supabase = createAdminClient()
+
+  // Only get steps with day_offset > 0 — day 0 is handled by the first response
+  const { data: steps } = await supabase
+    .from('inbound_sequence_steps')
+    .select('id, step_number, day_offset, step_type')
+    .eq('sequence_id', sequenceId)
+    .eq('step_type', 'email')
+    .gt('day_offset', 0)
+    .order('step_number', { ascending: true })
+
+  if (!steps || steps.length === 0) return
+
+  const emailRows = steps.map((step: { id: string; step_number: number; day_offset: number; step_type: string }) => {
     const sendDate = new Date(enrolledAt)
     sendDate.setDate(sendDate.getDate() + step.day_offset)
     return {
@@ -135,25 +161,4 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
   })
 
   await supabase.from('inbound_emails').insert(emailRows)
-
-  // 6. Process day-0 email immediately (creates Gmail draft)
-  if (sequence.sender_user_id) {
-    const { data: day0Row } = await supabase
-      .from('inbound_emails')
-      .select('id')
-      .eq('enrollment_id', enrollmentId)
-      .eq('send_date', today)
-      .single()
-
-    if (day0Row) {
-      await processInboundEmail(day0Row.id).catch((err) => {
-        console.error('Day-0 inbound email processing error:', err)
-      })
-    }
-  }
-
-  return {
-    enrollmentId,
-    isHighValue: false,
-  }
 }

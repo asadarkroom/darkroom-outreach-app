@@ -11,7 +11,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const supabase = createAdminClient()
 
   const [{ data: enrollment, error }, { data: emails }] = await Promise.all([
-    supabase.from('inbound_enrollments').select('*').eq('id', id).single(),
+    supabase
+      .from('inbound_enrollments')
+      .select(
+        `id, contact_name, contact_email, contact_phone,
+         company_name, services_interested, media_budget,
+         inquiry_type, referrer, page_url,
+         status, is_high_value, hubspot_contact_id,
+         enrolled_at, reply_detected_at,
+         lead_tier, research_summary, disqualify_reason,
+         first_response_subject, first_response_body,
+         first_response_sent_at, first_response_gmail_message_id,
+         cadence_json`
+      )
+      .eq('id', id)
+      .single(),
     supabase
       .from('inbound_emails')
       .select('*, inbound_sequence_steps(step_number, day_offset, step_type, subject_template)')
