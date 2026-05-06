@@ -45,10 +45,14 @@ export async function qualifyInboundLead(params: {
   const { contactName, companyName, servicesInterested, mediaBudget, inquiryType, pageUrl } = params
 
   const calendlyUrl = process.env.CALENDLY_URL || 'https://calendar.app.google/AfnPvHX9VWnc13Be7'
+  const agencyOverviewUrl = process.env.AGENCY_OVERVIEW_URL || ''
   const senderFullName = process.env.SENDER_NAME || 'Asa Juhlin'
   const senderFirstName = senderFullName.split(' ')[0]
   const senderTitle = process.env.SENDER_TITLE || 'Associate Director, Revenue Operations at Darkroom'
   const agencyName = 'Darkroom'
+  const agencyOverviewLine = agencyOverviewUrl
+    ? `In the meantime, also check out our [Agency Overview deck](${agencyOverviewUrl}) for more info on the breadth of our services.`
+    : `In the meantime, I'm happy to share our Agency Overview deck if you'd like more info on our services.`
 
   const leadContext = [
     `Name: ${contactName}`,
@@ -93,27 +97,31 @@ ${leadContext}
 
 ---
 
-WRITING TONE & STYLE (match this in all emails):
-- Casual, direct, peer-to-peer — not salesy or corporate
-- Short paragraphs, plain language
-- Sign off as just "${senderFirstName}" (first name only)
-- Use "Hey [first name]" greeting
+TONE & STYLE RULES (strictly follow these):
+- Casual, direct, peer-to-peer — never salesy or corporate
+- Short paragraphs, plain conversational language
+- Greet with "Hey [first name],"
+- Introduce as: "My name is ${senderFirstName}, and I manage our partnerships here."
+- Sign off: "Sending my best,\n\n${senderFirstName}"
+- NEVER paste raw URLs — always use markdown hyperlinks: [link text](url)
+- Calendar link must be written as: [grab 30 minutes on my calendar here](${calendlyUrl})
+- Agency Overview must be written as: ${agencyOverviewLine}
 
 ---
 
-EXAMPLE questionable email (use this as your template for questionable leads — adapt content, keep the structure and tone):
+EXAMPLE good_fit email (match this tone and structure exactly — substitute their actual details):
 
-Subject: Re: Your Darkroom Inquiry
+Subject: Re: [Their inquiry topic]
 
 Hey [first name],
 
-Thanks for reaching out! My name is ${senderFirstName}, and I manage ${senderTitle}.
+Thanks for reaching out to Darkroom. My name is ${senderFirstName}, and I manage our partnerships here.
 
-To start our conversation, I'm sharing our Agency Overview for your review, which includes our pricing structure and portfolio of services.
+[Service they mentioned] is something we're really deep on right now. It's one of our strongest offerings and where we see the biggest lift for brands at your stage. Would love to learn more about what [company] is working on and where you're feeling the gaps.
 
-Transparently, it looks like your budget is a bit low, but happy to hop on a call if you think that's incorrect. For context, our TikTok Shop offering starts at $6,500/month.
+I'd love to walk you through how we approach [service] and how it ties directly into [relevant outcome]. Feel free to [grab 30 minutes on my calendar here](${calendlyUrl}) or send me some times that work for you.
 
-If it still makes sense for you, feel free to book 30 minutes on my calendar here: ${calendlyUrl}
+${agencyOverviewLine}
 
 Sending my best,
 
@@ -121,11 +129,31 @@ ${senderFirstName}
 
 ---
 
-For good_fit: Write a warm, excited email referencing what they told us. Lead with enthusiasm about their brand. Ask for a call with the booking link: ${calendlyUrl}. Keep it to 3-4 short paragraphs.
+EXAMPLE questionable email (match this tone and structure exactly):
 
-For questionable: Follow the example template above closely. Be transparent, give them an easy out, reference the pricing, include the calendar link.
+Subject: Re: Your Darkroom Inquiry
 
-For not_fit: No email. Just explain why in disqualify_reason.
+Hey [first name],
+
+Thanks for reaching out to Darkroom. My name is ${senderFirstName}, and I manage our partnerships here.
+
+${agencyOverviewLine}
+
+Transparently, it looks like your budget is a bit low, but happy to hop on a call if you think that's incorrect. For context, our TikTok Shop offering starts at $6,500/month.
+
+If it still makes sense for you, feel free to [grab 30 minutes on my calendar here](${calendlyUrl}) or send me some times that work.
+
+Sending my best,
+
+${senderFirstName}
+
+---
+
+For good_fit: Follow the good_fit example above. Be specific to their services interest and company. Show genuine enthusiasm. Keep it 4 short paragraphs.
+
+For questionable: Follow the questionable example above. Be transparent, give them an easy out, reference pricing, include calendar link.
+
+For not_fit: No email. Explain why in disqualify_reason.
 
 CADENCE (for good_fit and questionable only — starts the day AFTER the first email):
 Generate specific, realistic follow-up steps. Include actual talking points and message copy.
