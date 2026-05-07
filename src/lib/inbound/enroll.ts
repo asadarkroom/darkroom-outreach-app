@@ -79,12 +79,13 @@ export async function enrollInboundContact(payload: HubSpotFormPayload): Promise
 
   const enrollmentId = enrollment.id
 
-  // 4. Run qualification in background (don't block webhook response)
-  qualifyAndUpdate(enrollmentId, payload, sequence?.id || null).catch(err =>
+  // Run qualification synchronously — must complete before returning so Vercel
+  // doesn't kill the background process when the webhook response is sent.
+  await qualifyAndUpdate(enrollmentId, payload, sequence?.id || null).catch(err =>
     console.error('Qualification error for enrollment', enrollmentId, err)
   )
 
-  // 5. Schedule follow-up sequence emails (day_offset > 0 only) if sequence exists
+  // Schedule follow-up sequence emails (day_offset > 0 only) if sequence exists
   if (sequence) {
     await scheduleFollowUps(enrollmentId, sequence.id, enrolledAt)
   }

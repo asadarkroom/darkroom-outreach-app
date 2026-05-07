@@ -137,11 +137,11 @@ Hey [first name],
 
 Thanks for reaching out to Darkroom. My name is ${senderFirstName}, and I manage our partnerships here.
 
+Based on what you've shared, it looks like your current budget may be below our minimum investment threshold — so we're going to pass for now.
+
+That said, if we're making an incorrect assumption, I'd love to be corrected. Feel free to [grab 30 minutes on my calendar here](${calendlyUrl}) and walk us through your situation — we're happy to revisit if the fit is there.
+
 ${agencyOverviewLine}
-
-Transparently, it looks like your budget is a bit low, but happy to hop on a call if you think that's incorrect. For context, our TikTok Shop offering starts at $6,500/month.
-
-If it still makes sense for you, feel free to [grab 30 minutes on my calendar here](${calendlyUrl}) or send me some times that work.
 
 Sending my best,
 
