@@ -151,9 +151,9 @@ ${senderFirstName}
 
 For good_fit: Follow the good_fit example above. Be specific to their services interest and company. Show genuine enthusiasm. Keep it 4 short paragraphs.
 
-For questionable: Follow the questionable example above. Be transparent, give them an easy out, reference pricing, include calendar link.
+For questionable: Follow the questionable example above. Use "may be below" language — leaving some uncertainty.
 
-For not_fit: No email. Explain why in disqualify_reason.
+For not_fit: Also generate a first response. Use the questionable template but be more direct: "your current budget is below our minimum investment threshold — so we're going to pass for now." Still leave the door open if they want to correct us. Set disqualify_reason explaining why they don't fit.
 
 CADENCE (for good_fit and questionable only — starts the day AFTER the first email):
 Generate specific, realistic follow-up steps. Include actual talking points and message copy.

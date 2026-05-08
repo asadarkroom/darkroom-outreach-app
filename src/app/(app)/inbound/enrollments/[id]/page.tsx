@@ -335,8 +335,8 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
         <div className="lg:col-span-2 space-y-5">
 
           {/* First Response Card */}
-          {!isDisqualified && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          {/* First Response — shown for all tiers including disqualified (low-budget leads still get outreach) */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
                 <div className="flex items-center gap-2">
                   <Send className="w-3.5 h-3.5 text-indigo-400" />
@@ -428,23 +428,22 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                 </div>
               )}
             </div>
-          )}
 
-          {/* Disqualified banner */}
+          {/* Disqualified banner — shown below the email card so you can still send the outreach */}
           {isDisqualified && (
-            <div className="bg-red-900/20 border border-red-800/40 rounded-xl px-4 py-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Ban className="w-4 h-4 text-red-400" />
-                <h2 className="text-sm font-medium text-red-300">Lead Disqualified</h2>
+            <div className="bg-red-900/20 border border-red-800/40 rounded-xl px-4 py-3 flex items-start gap-2">
+              <Ban className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-red-300">Marked disqualified</p>
+                <p className="text-xs text-red-300/70 mt-0.5">
+                  {enrollment.disqualify_reason || 'Did not meet qualification criteria.'}
+                </p>
               </div>
-              <p className="text-xs text-red-300/80">
-                {enrollment.disqualify_reason || 'This lead did not meet Darkroom\'s qualification criteria.'}
-              </p>
             </div>
           )}
 
           {/* Follow-up Cadence */}
-          {cadence.length > 0 && !isDisqualified && (
+          {cadence.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800">
                 <Clock className="w-3.5 h-3.5 text-gray-400" />
@@ -626,7 +625,7 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
           )}
 
           {/* Empty state */}
-          {!isDisqualified && !hasFirstResponse && cadence.length === 0 && emails.length === 0 && (
+          {!hasFirstResponse && cadence.length === 0 && emails.length === 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-10 text-center">
               <Sparkles className="w-6 h-6 text-gray-600 mx-auto mb-3" />
               <p className="text-gray-400 text-sm">Generating qualified response…</p>
