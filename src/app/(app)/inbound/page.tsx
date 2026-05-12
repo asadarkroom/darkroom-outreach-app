@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Mail, Clock, CheckCircle, AlertTriangle, MessageSquare,
-  ArrowRight, RefreshCw, Settings, UserX,
+  ArrowRight, RefreshCw, Settings, UserX, Bell,
 } from 'lucide-react'
+import type { CadenceItem } from '@/lib/inbound/qualify'
 
 interface InboundStats {
   total: number
@@ -27,6 +28,28 @@ interface Enrollment {
   status: string
   enrolled_at: string
   reply_detected_at: string | null
+  cadence_json: CadenceItem[] | null
+  lead_tier: string | null
+}
+
+function dueCadenceCount(enrollment: Enrollment): { due: number; overdue: number } {
+  if (!enrollment.cadence_json || enrollment.cadence_json.length === 0) return { due: 0, overdue: 0 }
+
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const enrolledDate = new Date(enrollment.enrolled_at)
+  const enrolledDay = new Date(enrolledDate.getFullYear(), enrolledDate.getMonth(), enrolledDate.getDate())
+
+  let due = 0, overdue = 0
+  for (const item of enrollment.cadence_json) {
+    if (item.status !== 'pending') continue
+    const dueDate = new Date(enrolledDay)
+    dueDate.setDate(dueDate.getDate() + item.day_offset)
+    const diffDays = Math.floor((today.getTime() - dueDate.getTime()) / 86400000)
+    if (diffDays === 0) due++
+    else if (diffDays > 0) overdue++
+  }
+  return { due, overdue }
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -156,6 +179,34 @@ export default function InboundPage() {
         </div>
       )}
 
+      {/* Due-today / overdue banner */}
+      {(() => {
+        const totalDue = enrollments.reduce((sum, e) => sum + dueCadenceCount(e).due, 0)
+        const totalOverdue = enrollments.reduce((sum, e) => sum + dueCadenceCount(e).overdue, 0)
+        if (totalDue === 0 && totalOverdue === 0) return null
+        return (
+          <div className={`border rounded-xl p-4 flex items-center justify-between ${
+            totalOverdue > 0
+              ? 'bg-red-900/20 border-red-700/50'
+              : 'bg-orange-900/20 border-orange-700/50'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <Bell className={`w-4 h-4 flex-shrink-0 ${totalOverdue > 0 ? 'text-red-400' : 'text-orange-400'}`} />
+              <div>
+                <p className={`text-sm font-medium ${totalOverdue > 0 ? 'text-red-300' : 'text-orange-300'}`}>
+                  {totalOverdue > 0
+                    ? `${totalOverdue} overdue cadence step${totalOverdue !== 1 ? 's' : ''}`
+                    : `${totalDue} cadence step${totalDue !== 1 ? 's' : ''} due today`}
+                </p>
+                <p className={`text-xs mt-0.5 ${totalOverdue > 0 ? 'text-red-500' : 'text-orange-500'}`}>
+                  Check the leads with badges below to take action
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* No-sequence warning */}
       {stats && stats.unenrolled > 0 && (
         <div className="bg-orange-900/20 border border-orange-700/50 rounded-xl p-4 flex items-center justify-between">
@@ -233,33 +284,51 @@ export default function InboundPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {enrollments.map((e) => (
-                <tr key={e.id} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-white">{e.contact_name}</p>
-                    <p className="text-gray-500 text-xs">{e.contact_email}</p>
-                  </td>
-                  <td className="px-4 py-3 text-gray-300">{e.company_name || '—'}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate" title={e.services_interested || ''}>
-                    {e.services_interested || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{e.media_budget || '—'}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={e.status} />
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {new Date(e.enrolled_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/inbound/enrollments/${e.id}`}
-                      className="text-indigo-400 hover:text-indigo-300 text-xs font-medium"
-                    >
-                      View →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+              {enrollments.map((e) => {
+                const { due, overdue } = dueCadenceCount(e)
+                const hasDue = due > 0 || overdue > 0
+                return (
+                  <tr key={e.id} className="hover:bg-gray-800/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-medium text-white">{e.contact_name}</p>
+                          <p className="text-gray-500 text-xs">{e.contact_email}</p>
+                        </div>
+                        {hasDue && (
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
+                            overdue > 0
+                              ? 'bg-red-900/50 text-red-400 border border-red-700/50'
+                              : 'bg-orange-900/50 text-orange-400 border border-orange-700/50'
+                          }`}>
+                            <Bell className="w-2.5 h-2.5" />
+                            {overdue > 0 ? `${overdue} overdue` : `${due} due`}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-300">{e.company_name || '—'}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate" title={e.services_interested || ''}>
+                      {e.services_interested || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{e.media_budget || '—'}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={e.status} />
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">
+                      {new Date(e.enrolled_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/inbound/enrollments/${e.id}`}
+                        className="text-indigo-400 hover:text-indigo-300 text-xs font-medium"
+                      >
+                        View →
+                      </Link>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

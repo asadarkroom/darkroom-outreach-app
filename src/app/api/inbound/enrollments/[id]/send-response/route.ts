@@ -23,7 +23,7 @@ export async function POST(
 
   const { data: enrollment, error } = await supabase
     .from('inbound_enrollments')
-    .select('id, contact_name, contact_email, first_response_sent_at, sequence_id')
+    .select('id, contact_name, contact_email, first_response_sent_at, sequence_id, lead_tier')
     .eq('id', id)
     .single()
 
@@ -54,10 +54,16 @@ export async function POST(
   const fromEmail = senderProfile?.email || ''
   const fromName = senderUser?.name || 'Darkroom'
 
+  // CC Peter Gao when the lead was manually qualified
+  const ccEmails = enrollment.lead_tier === 'manually_qualified'
+    ? ['peter@darkroomagency.com']
+    : undefined
+
   try {
     const messageId = await sendGmailEmail({
       userId: senderUserId,
       to: enrollment.contact_email,
+      cc: ccEmails,
       subject,
       body,
       fromName,

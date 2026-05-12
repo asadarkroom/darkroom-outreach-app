@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Mail, Send, Clock, CheckCircle, AlertTriangle,
   FileText, ExternalLink, RefreshCw, Phone, MessageSquare,
-  Sparkles, Ban, HelpCircle, Check, X, Loader2,
+  Sparkles, Ban, HelpCircle, Check, X, Loader2, UserCheck, Minus,
 } from 'lucide-react'
 import type { CadenceItem } from '@/lib/inbound/qualify'
 
@@ -63,19 +63,19 @@ function TierBadge({ tier }: { tier: string | null }) {
       </span>
     )
   }
-  if (tier === 'good_fit') {
+  if (tier === 'good_fit' || tier === 'manually_qualified') {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-900/60 text-green-300 border border-green-700/60">
         <CheckCircle className="w-3 h-3" />
-        Good Fit
+        {tier === 'manually_qualified' ? 'Manually Qualified' : 'Good Fit'}
       </span>
     )
   }
-  if (tier === 'questionable') {
+  if (tier === 'questionable' || tier === 'manually_on_fence') {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-900/60 text-yellow-300 border border-yellow-700/60">
         <HelpCircle className="w-3 h-3" />
-        Needs Clarification
+        {tier === 'manually_on_fence' ? 'On the Fence' : 'Needs Clarification'}
       </span>
     )
   }
@@ -126,6 +126,9 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
   // Re-qualify
   const [qualifying, setQualifying] = useState(false)
   const [pollCount, setPollCount] = useState(0)
+
+  // Manual override
+  const [overriding, setOverriding] = useState<'qualified' | 'on_the_fence' | null>(null)
 
   async function load() {
     const res = await fetch(`/api/inbound/enrollments/${id}`)
@@ -190,6 +193,22 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
     }
   }
 
+  async function manualOverride(overrideType: 'qualified' | 'on_the_fence') {
+    setOverriding(overrideType)
+    try {
+      await fetch(`/api/inbound/enrollments/${id}/manual-qualify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ overrideType }),
+      })
+      setEditSubject('')
+      setEditBody('')
+      await load()
+    } finally {
+      setOverriding(null)
+    }
+  }
+
   async function retry(emailId: string) {
     setRetrying(emailId)
     try {
@@ -245,14 +264,32 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
             {enrollment.contact_email}
           </p>
         </div>
-        <button
-          onClick={reQualify}
-          disabled={qualifying}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg border border-gray-700 transition-colors disabled:opacity-50"
-        >
-          <Sparkles className={`w-3.5 h-3.5 ${qualifying ? 'animate-pulse' : ''}`} />
-          {qualifying ? 'Re-qualifying…' : 'Re-qualify'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => manualOverride('on_the_fence')}
+            disabled={!!overriding || qualifying}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-yellow-900/40 hover:bg-yellow-900/70 text-yellow-300 rounded-lg border border-yellow-700/50 transition-colors disabled:opacity-50"
+          >
+            <Minus className={`w-3.5 h-3.5 ${overriding === 'on_the_fence' ? 'animate-pulse' : ''}`} />
+            {overriding === 'on_the_fence' ? 'Generating…' : 'On the Fence'}
+          </button>
+          <button
+            onClick={() => manualOverride('qualified')}
+            disabled={!!overriding || qualifying}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-900/40 hover:bg-green-900/70 text-green-300 rounded-lg border border-green-700/50 transition-colors disabled:opacity-50"
+          >
+            <UserCheck className={`w-3.5 h-3.5 ${overriding === 'qualified' ? 'animate-pulse' : ''}`} />
+            {overriding === 'qualified' ? 'Generating…' : 'Qualify'}
+          </button>
+          <button
+            onClick={reQualify}
+            disabled={qualifying || !!overriding}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg border border-gray-700 transition-colors disabled:opacity-50"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${qualifying ? 'animate-pulse' : ''}`} />
+            {qualifying ? 'Re-qualifying…' : 'Re-qualify'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -389,6 +426,12 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                   </div>
                   {sendError && (
                     <p className="text-xs text-red-400">{sendError}</p>
+                  )}
+                  {enrollment.lead_tier === 'manually_qualified' && (
+                    <div className="flex items-center gap-1.5 text-xs text-blue-400 bg-blue-900/20 border border-blue-800/40 rounded-lg px-3 py-2">
+                      <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                      Peter Gao (peter@darkroomagency.com) will be CC'd on this email
+                    </div>
                   )}
                   <div className="flex items-center gap-2 pt-1">
                     <button
