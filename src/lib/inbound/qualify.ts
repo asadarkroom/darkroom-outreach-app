@@ -13,7 +13,7 @@ import { randomUUID } from 'crypto'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-export type LeadTier = 'good_fit' | 'questionable' | 'not_fit' | 'unassessed'
+export type LeadTier = 'good_fit' | 'questionable' | 'not_fit' | 'unassessed' | 'manually_qualified' | 'manually_on_fence'
 
 export interface CadenceItem {
   id: string
@@ -41,8 +41,16 @@ export async function qualifyInboundLead(params: {
   mediaBudget: string | null
   inquiryType: string | null
   pageUrl: string | null
+  manualOverride?: 'qualified' | 'on_the_fence'
 }): Promise<QualificationResult> {
-  const { contactName, companyName, servicesInterested, mediaBudget, inquiryType, pageUrl } = params
+  const { contactName, companyName, servicesInterested, mediaBudget, inquiryType, pageUrl, manualOverride } = params
+
+  // Manual override: skip AI tier assessment, generate targeted meeting-request email + 5-step cadence
+  if (manualOverride) {
+    return generateManualOverrideResult({
+      contactName, companyName, servicesInterested, mediaBudget, inquiryType, pageUrl, manualOverride,
+    })
+  }
 
   const calendlyUrl = process.env.CALENDLY_URL || 'https://calendar.app.google/Qm4TytjzXZA14k7N9'
   const agencyOverviewUrl = process.env.AGENCY_OVERVIEW_URL || 'https://darkroom.docsend.com/view/svxjbhtf2fdbnck4'
@@ -239,5 +247,201 @@ Respond with ONLY raw JSON (no markdown, no code fences):
       first_response_body: undefined,
       cadence: [],
     }
+  }
+}
+
+async function generateManualOverrideResult(params: {
+  contactName: string
+  companyName: string | null
+  servicesInterested: string | null
+  mediaBudget: string | null
+  inquiryType: string | null
+  pageUrl: string | null
+  manualOverride: 'qualified' | 'on_the_fence'
+}): Promise<QualificationResult> {
+  const { contactName, companyName, servicesInterested, manualOverride } = params
+
+  const calendlyUrl = process.env.CALENDLY_URL || 'https://calendar.app.google/Qm4TytjzXZA14k7N9'
+  const agencyOverviewUrl = process.env.AGENCY_OVERVIEW_URL || 'https://darkroom.docsend.com/view/svxjbhtf2fdbnck4'
+  const senderFullName = process.env.SENDER_NAME || 'Asa Juhlin'
+  const senderFirstName = senderFullName.split(' ')[0]
+  const peterName = 'Peter'
+  const peterEmail = 'peter@darkroomagency.com'
+
+  const agencyOverviewLine = agencyOverviewUrl
+    ? `In the meantime, also check out our [Agency Overview deck](${agencyOverviewUrl}) for more info on the breadth of our services.`
+    : `In the meantime, I'm happy to share our Agency Overview deck if you'd like more info on our services.`
+
+  const firstName = contactName.split(' ')[0]
+  const companyLine = companyName ? ` at ${companyName}` : ''
+  const serviceLine = servicesInterested
+    ? `It sounds like you're interested in ${servicesInterested.toLowerCase()}, which is`
+    : 'Darkroom is'
+
+  if (manualOverride === 'qualified') {
+    const prompt = `
+You are ${senderFirstName} (${senderFullName}), Associate Director, Revenue Operations at Darkroom.
+
+Write a short, casual, peer-to-peer email to ${contactName}${companyLine} requesting a 30-minute meeting to explore working together. My colleague ${peterName} (${peterEmail}) will be CC'd on this email and will join the call.
+
+Lead details:
+- Name: ${contactName}
+${companyName ? `- Company: ${companyName}` : ''}
+${servicesInterested ? `- Services interested in: ${servicesInterested}` : ''}
+
+Guidelines:
+- Greet: "Hey ${firstName},"
+- Intro: "My name is ${senderFirstName}, and I manage our partnerships here."
+- Mention that ${serviceLine} one of Darkroom's strongest offerings
+- Ask for 30 min with "me and ${peterName}" — [grab 30 minutes on our calendar here](${calendlyUrl})
+- ${agencyOverviewLine}
+- Sign off: "Sending my best,\n\n${senderFirstName}"
+- Casual, direct, 3-4 short paragraphs, no corporate language
+
+Respond with ONLY raw JSON (no markdown, no code fences):
+{
+  "subject": "string",
+  "body": "string"
+}
+`.trim()
+
+    try {
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: prompt }],
+      })
+      const text = message.content[0]?.type === 'text' ? message.content[0].text.trim() : ''
+      const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+      const parsed = JSON.parse(clean) as { subject: string; body: string }
+
+      const cadence: CadenceItem[] = [
+        {
+          id: randomUUID(), type: 'call', day_offset: 1, status: 'pending',
+          title: 'Follow-up call',
+          body: `Call ${contactName}${companyLine} to follow up on the meeting request email.\n\nTalking points:\n- Introduce yourself briefly\n- Reference the email you just sent\n- Ask if they had a chance to look at the calendar link\n- Confirm a 30-min slot with you and ${peterName}`,
+        },
+        {
+          id: randomUUID(), type: 'text', day_offset: 3, status: 'pending',
+          title: 'Text follow-up',
+          body: `Hey ${firstName} — Asa from Darkroom. Wanted to follow up on my email about connecting with our team. Would love to find 30 min this week. Let me know!`,
+        },
+        {
+          id: randomUUID(), type: 'email', day_offset: 5, status: 'pending',
+          title: 'Follow-up email',
+          body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nJust wanted to bump this to the top of your inbox in case it got buried.\n\nWould still love to find 30 minutes to connect with you and ${peterName} — feel free to [grab time on our calendar here](${calendlyUrl}) or just reply with a couple times that work.\n\nSending my best,\n\n${senderFirstName}`,
+        },
+        {
+          id: randomUUID(), type: 'call', day_offset: 8, status: 'pending',
+          title: 'Second follow-up call',
+          body: `Second attempt to reach ${contactName}${companyLine}.\n\nIf they answer:\n- Casual check-in, not pushy\n- "Hey, just wanted to make sure my emails weren't going to spam"\n- Confirm interest and book the 30-min slot`,
+        },
+        {
+          id: randomUUID(), type: 'email', day_offset: 12, status: 'pending',
+          title: 'Break-up email',
+          body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nI'll stop filling up your inbox after this one — but wanted to reach out one last time before moving on.\n\nIf timing is ever right to explore what we could do together, feel free to [grab time on my calendar](${calendlyUrl}) anytime.\n\nWishing you the best,\n\n${senderFirstName}`,
+        },
+      ]
+
+      return {
+        tier: 'manually_qualified',
+        research_summary: `Manually qualified by team. ${companyName || contactName} flagged as a strong fit for a 30-min intro call with ${senderFirstName} and ${peterName}. First response requests a meeting; ${peterName} is CC'd.`,
+        first_response_subject: parsed.subject,
+        first_response_body: parsed.body,
+        cadence,
+      }
+    } catch (err) {
+      console.error('Manual qualified email generation error:', err)
+      return manualOverrideFallback(contactName, companyName, 'manually_qualified')
+    }
+  }
+
+  // on_the_fence: 15-min ASAP, just Asa
+  const prompt = `
+You are ${senderFirstName} (${senderFullName}), Associate Director, Revenue Operations at Darkroom.
+
+Write a short, casual email to ${contactName}${companyLine} requesting a quick 15-minute call to learn more about their situation and see if there's a fit. Just you — no mention of other team members.
+
+Lead details:
+- Name: ${contactName}
+${companyName ? `- Company: ${companyName}` : ''}
+${servicesInterested ? `- Services interested in: ${servicesInterested}` : ''}
+
+Guidelines:
+- Greet: "Hey ${firstName},"
+- Intro: "My name is ${senderFirstName}, and I manage our partnerships here."
+- Express curiosity about their situation — you want to learn more before assuming fit
+- Ask for 15 min "as soon as this week" — [grab 15 minutes on my calendar here](${calendlyUrl})
+- Keep it warm but brief — 2-3 short paragraphs
+- Sign off: "Sending my best,\n\n${senderFirstName}"
+- No agency overview link needed for this one
+
+Respond with ONLY raw JSON (no markdown, no code fences):
+{
+  "subject": "string",
+  "body": "string"
+}
+`.trim()
+
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const text = message.content[0]?.type === 'text' ? message.content[0].text.trim() : ''
+    const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+    const parsed = JSON.parse(clean) as { subject: string; body: string }
+
+    const cadence: CadenceItem[] = [
+      {
+        id: randomUUID(), type: 'call', day_offset: 1, status: 'pending',
+        title: 'Follow-up call',
+        body: `Call ${contactName}${companyLine} to follow up on the 15-min call request.\n\nTalking points:\n- Quick intro\n- "Just following up on my email — wanted to see if a 15-min call this week works"\n- Keep it light, no hard sell`,
+      },
+      {
+        id: randomUUID(), type: 'text', day_offset: 2, status: 'pending',
+        title: 'Text follow-up',
+        body: `Hey ${firstName} — Asa from Darkroom. Sent you an email about a quick 15-min call. Would love to connect this week if you're open to it!`,
+      },
+      {
+        id: randomUUID(), type: 'email', day_offset: 4, status: 'pending',
+        title: 'Follow-up email',
+        body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nJust following up in case my last email got lost.\n\nWould still love to find 15 minutes to chat — feel free to [grab a quick slot here](${calendlyUrl}) or just reply with a time that works.\n\nSending my best,\n\n${senderFirstName}`,
+      },
+      {
+        id: randomUUID(), type: 'call', day_offset: 6, status: 'pending',
+        title: 'Second follow-up call',
+        body: `Second attempt to reach ${contactName}.\n\nIf they answer:\n- "Hey, I know my timing might be off — just wanted to make sure my email landed"\n- Keep it to 2 minutes, ask if they're open to a 15-min call this week`,
+      },
+      {
+        id: randomUUID(), type: 'email', day_offset: 9, status: 'pending',
+        title: 'Break-up email',
+        body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nLast note from me — I don't want to clog up your inbox.\n\nIf the timing ever makes sense to chat, feel free to [grab 15 minutes here](${calendlyUrl}).\n\nWishing you the best,\n\n${senderFirstName}`,
+      },
+    ]
+
+    return {
+      tier: 'manually_on_fence',
+      research_summary: `Manually flagged as on the fence. ${companyName || contactName} may be a fit — ${senderFirstName} wants to learn more before committing. First response is a 15-min exploratory call request.`,
+      first_response_subject: parsed.subject,
+      first_response_body: parsed.body,
+      cadence,
+    }
+  } catch (err) {
+    console.error('Manual on_the_fence email generation error:', err)
+    return manualOverrideFallback(contactName, companyName, 'manually_on_fence')
+  }
+}
+
+function manualOverrideFallback(
+  contactName: string,
+  companyName: string | null,
+  tier: 'manually_qualified' | 'manually_on_fence'
+): QualificationResult {
+  return {
+    tier,
+    research_summary: `Manually overridden to ${tier}. Email generation failed — edit and send manually.`,
+    cadence: [],
   }
 }

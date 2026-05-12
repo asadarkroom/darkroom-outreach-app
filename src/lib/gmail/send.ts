@@ -10,6 +10,7 @@ import { plainTextToHtml } from './drafts'
 interface SendEmailParams {
   userId: string
   to: string
+  cc?: string[]
   subject: string
   body: string
   fromName: string
@@ -23,7 +24,7 @@ interface SendEmailParams {
  * Returns the Gmail message ID of the sent message.
  */
 export async function sendGmailEmail(params: SendEmailParams): Promise<string> {
-  const { userId, to, subject, body, fromName, fromEmail, inReplyTo, threadId } = params
+  const { userId, to, cc, subject, body, fromName, fromEmail, inReplyTo, threadId } = params
 
   const auth = await getAuthenticatedClient(userId)
   const gmail = google.gmail({ version: 'v1', auth })
@@ -32,6 +33,7 @@ export async function sendGmailEmail(params: SendEmailParams): Promise<string> {
     'MIME-Version: 1.0',
     `From: ${fromName} <${fromEmail}>`,
     `To: ${to}`,
+    ...(cc && cc.length > 0 ? [`Cc: ${cc.join(', ')}`] : []),
     `Subject: ${subject}`,
     'Content-Type: text/html; charset=utf-8',
   ]
