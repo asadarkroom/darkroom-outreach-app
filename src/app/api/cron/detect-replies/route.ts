@@ -59,16 +59,27 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 2. Inbound enrollments ────────────────────────────────────
+  // Use left join so manually-qualified leads (no sequence) are still checked.
+  // Fall back to the digest/sender account for those.
   const { data: inboundActive } = await supabase
     .from('inbound_enrollments')
-    .select('id, contact_email, enrolled_at, inbound_sequences!inner(sender_user_id)')
+    .select('id, contact_email, enrolled_at, cadence_json, inbound_sequences(sender_user_id)')
     .eq('status', 'active')
+
+  // Resolve fallback sender (Asa) for enrollments without a sequence
+  const digestEmail = process.env.DIGEST_EMAIL || 'asa@darkroomagency.com'
+  const { data: fallbackUser } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', digestEmail)
+    .single()
+  const fallbackSenderId = fallbackUser?.id || null
 
   for (const enrollment of inboundActive || []) {
     results.checked++
     try {
-      const seq = enrollment.inbound_sequences as unknown as { sender_user_id: string | null }
-      const senderUserId = seq?.sender_user_id
+      const seq = enrollment.inbound_sequences as unknown as { sender_user_id: string | null } | null
+      const senderUserId = seq?.sender_user_id || fallbackSenderId
       if (!senderUserId || !enrollment.contact_email) continue
 
       const enrolledAt = enrollment.enrolled_at ? new Date(enrollment.enrolled_at) : new Date()
@@ -76,11 +87,19 @@ export async function GET(req: NextRequest) {
 
       if (replied) {
         const now = new Date().toISOString()
+
+        // Skip all pending cadence items
+        const cadence = (enrollment.cadence_json || []) as Array<{ status: string }>
+        const updatedCadence = cadence.map(item =>
+          item.status === 'pending' ? { ...item, status: 'skipped' } : item
+        )
+
         await supabase.from('inbound_enrollments').update({
           status: 'replied',
           unenrolled_at: now,
           unenroll_reason: 'replied',
           reply_detected_at: now,
+          cadence_json: updatedCadence,
         }).eq('id', enrollment.id)
 
         await supabase.from('inbound_emails').update({ status: 'cancelled' })
