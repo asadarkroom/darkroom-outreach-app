@@ -262,6 +262,7 @@ async function generateManualOverrideResult(params: {
   const { contactName, companyName, servicesInterested, manualOverride } = params
 
   const calendlyUrl = process.env.CALENDLY_URL || 'https://calendar.app.google/Qm4TytjzXZA14k7N9'
+  const calendly15MinUrl = process.env.CALENDLY_URL_15MIN || 'https://calendar.app.google/REJbeudrwjkKzsWt8'
   const agencyOverviewUrl = process.env.AGENCY_OVERVIEW_URL || 'https://darkroom.docsend.com/view/svxjbhtf2fdbnck4'
   const senderFullName = process.env.SENDER_NAME || 'Asa Juhlin'
   const senderFirstName = senderFullName.split(' ')[0]
@@ -371,7 +372,7 @@ Guidelines:
 - Greet: "Hey ${firstName},"
 - Intro: "My name is ${senderFirstName}, and I manage our partnerships here."
 - Express curiosity about their situation — you want to learn more before assuming fit
-- Ask for 15 min "as soon as this week" — [grab 15 minutes on my calendar here](${calendlyUrl})
+- Ask for 15 min "as soon as this week" — [grab 15 minutes on my calendar here](${calendly15MinUrl})
 - Keep it warm but brief — 2-3 short paragraphs
 - Sign off: "Sending my best,\n\n${senderFirstName}"
 - No agency overview link needed for this one
@@ -407,7 +408,7 @@ Respond with ONLY raw JSON (no markdown, no code fences):
       {
         id: randomUUID(), type: 'email', day_offset: 4, status: 'pending',
         title: 'Follow-up email',
-        body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nJust following up in case my last email got lost.\n\nWould still love to find 15 minutes to chat — feel free to [grab a quick slot here](${calendlyUrl}) or just reply with a time that works.\n\nSending my best,\n\n${senderFirstName}`,
+        body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nJust following up in case my last email got lost.\n\nWould still love to find 15 minutes to chat — feel free to [grab a quick slot here](${calendly15MinUrl}) or just reply with a time that works.\n\nSending my best,\n\n${senderFirstName}`,
       },
       {
         id: randomUUID(), type: 'call', day_offset: 6, status: 'pending',
@@ -417,7 +418,7 @@ Respond with ONLY raw JSON (no markdown, no code fences):
       {
         id: randomUUID(), type: 'email', day_offset: 9, status: 'pending',
         title: 'Break-up email',
-        body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nLast note from me — I don't want to clog up your inbox.\n\nIf the timing ever makes sense to chat, feel free to [grab 15 minutes here](${calendlyUrl}).\n\nWishing you the best,\n\n${senderFirstName}`,
+        body: `Subject: Re: ${parsed.subject}\n\nHey ${firstName},\n\nLast note from me — I don't want to clog up your inbox.\n\nIf the timing ever makes sense to chat, feel free to [grab 15 minutes here](${calendly15MinUrl}).\n\nWishing you the best,\n\n${senderFirstName}`,
       },
     ]
 
