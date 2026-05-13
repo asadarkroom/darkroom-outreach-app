@@ -119,16 +119,6 @@ async function qualifyAndUpdate(
   if (result.first_response_body) updates.first_response_body = result.first_response_body
   if (result.disqualify_reason) updates.disqualify_reason = result.disqualify_reason
 
-  if (result.tier === 'not_fit') {
-    updates.status = 'disqualified'
-    // Cancel any pending follow-up emails for disqualified leads
-    await supabase
-      .from('inbound_emails')
-      .update({ status: 'cancelled' })
-      .eq('enrollment_id', enrollmentId)
-      .eq('status', 'pending')
-  }
-
   await supabase.from('inbound_enrollments').update(updates).eq('id', enrollmentId)
 }
 
