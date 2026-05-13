@@ -53,6 +53,7 @@ export async function qualifyInboundLead(params: {
   }
 
   const calendlyUrl = process.env.CALENDLY_URL || 'https://calendar.app.google/Qm4TytjzXZA14k7N9'
+  const calendly15MinUrl = process.env.CALENDLY_URL_15MIN || 'https://calendar.app.google/REJbeudrwjkKzsWt8'
   const agencyOverviewUrl = process.env.AGENCY_OVERVIEW_URL || 'https://darkroom.docsend.com/view/svxjbhtf2fdbnck4'
   const senderFullName = process.env.SENDER_NAME || 'Asa Juhlin'
   const senderFirstName = senderFullName.split(' ')[0]
@@ -96,9 +97,9 @@ SERVICES FIT:
 - Not fit: B2B SaaS, SEO-only, web dev, PR-only, government, nonprofit
 
 TIERS:
-- good_fit: Clear services match AND strong budget signals. Shoot for booking a meeting.
-- questionable: Could be a match but budget is unclear, low-ish, or not stated. Send a transparent clarifying email.
-- not_fit: Wrong category OR explicitly stated budget under $10k. Disqualify.
+- good_fit: Clear services match AND strong budget signals ($30k+/mo). Shoot for booking a 30-min meeting.
+- questionable: Budget unclear, low-ish, or not stated — but services could be a match. Send an on-the-fence email.
+- not_fit: Wrong category (B2B, SEO-only, etc.) OR explicitly under $10k budget. Still send an on-the-fence email.
 
 LEAD DETAILS:
 ${leadContext}
@@ -112,7 +113,8 @@ TONE & STYLE RULES (strictly follow these):
 - Introduce as: "My name is ${senderFirstName}, and I manage our partnerships here."
 - Sign off: "Sending my best,\n\n${senderFirstName}"
 - NEVER paste raw URLs — always use markdown hyperlinks: [link text](url)
-- Calendar link must be written as: [grab 30 minutes on my calendar here](${calendlyUrl})
+- good_fit calendar link: [grab 30 minutes on my calendar here](${calendlyUrl})
+- questionable/not_fit calendar link: [grab 15 minutes on my calendar here](${calendly15MinUrl})
 - Agency Overview must be written as: ${agencyOverviewLine}
 
 ---
@@ -137,7 +139,7 @@ ${senderFirstName}
 
 ---
 
-EXAMPLE questionable email (match this tone and structure exactly):
+EXAMPLE questionable/not_fit email (use for BOTH questionable and not_fit — match this tone exactly):
 
 Subject: Re: Your Darkroom Inquiry
 
@@ -145,9 +147,9 @@ Hey [first name],
 
 Thanks for reaching out to Darkroom. My name is ${senderFirstName}, and I manage our partnerships here.
 
-Based on what you've shared, it looks like your current budget may be below our minimum investment threshold — so we're going to pass for now.
+Based on what you've shared, your current budget may be below our minimum investment threshold — so we're going to pass for now. Our paid media engagements start at $10–15k/month in agency fees, and we typically work with brands running $30k+ in monthly ad spend to drive meaningful scale.
 
-That said, if we're making an incorrect assumption, I'd love to be corrected. Feel free to [grab 30 minutes on my calendar here](${calendlyUrl}) and walk us through your situation — we're happy to revisit if the fit is there.
+That said, if we're making an incorrect assumption about your budget or where [company] is headed, I'd love to be corrected. Feel free to [grab 15 minutes on my calendar here](${calendly15MinUrl}) and walk us through your situation — we're happy to revisit if the fit is there.
 
 ${agencyOverviewLine}
 
@@ -159,32 +161,33 @@ ${senderFirstName}
 
 For good_fit: Follow the good_fit example above. Be specific to their services interest and company. Show genuine enthusiasm. Keep it 4 short paragraphs.
 
-For questionable: Follow the questionable example above. Use "may be below" language — leaving some uncertainty.
+For questionable: Follow the questionable/not_fit example above. Use "may be below" language — leaving some uncertainty. Use the 15-min calendar link.
 
-For not_fit: Also generate a first response. Use the questionable template but be more direct: "your current budget is below our minimum investment threshold — so we're going to pass for now." Still leave the door open if they want to correct us. Set disqualify_reason explaining why they don't fit.
+For not_fit: Follow the questionable/not_fit example above. Be slightly more direct about the budget threshold. Use the 15-min calendar link. Set disqualify_reason explaining why they don't fit, but still generate the email and a cadence.
 
-CADENCE (for good_fit and questionable only — starts the day AFTER the first email):
+CADENCE (all tiers — starts the day AFTER the first email):
 Generate specific, realistic follow-up steps. Include actual talking points and message copy.
 
-good_fit cadence (6-8 steps over ~2 weeks):
+good_fit cadence (5-6 steps over ~2 weeks):
 - Day 1: phone call with specific talking points referencing the email
 - Day 2: short text message
 - Day 4: follow-up email if no reply
 - Day 7: phone call
 - Day 10: final short "break-up" email
 
-questionable cadence (4-5 steps):
-- Day 3: follow-up email nudging them to clarify their budget
-- Day 5: short phone call
-- Day 8: final short email
+questionable/not_fit cadence (4-5 steps):
+- Day 2: follow-up email nudging them to clarify budget/situation
+- Day 4: short phone call
+- Day 6: short text
+- Day 9: final short email
 
 Respond with ONLY raw JSON (no markdown, no code fences):
 {
   "tier": "good_fit" | "questionable" | "not_fit",
   "research_summary": "2-3 sentences about who this person/company is and why they are/aren't a fit",
   "disqualify_reason": "string — only include if tier is not_fit",
-  "first_response_subject": "string — omit if not_fit",
-  "first_response_body": "string — omit if not_fit",
+  "first_response_subject": "string",
+  "first_response_body": "string",
   "cadence": [
     {
       "id": "1",
