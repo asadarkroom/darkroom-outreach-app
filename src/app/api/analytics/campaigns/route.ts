@@ -3,17 +3,23 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/options'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { searchParams } = new URL(req.url)
+  const includeArchived = searchParams.get('archived') === 'true'
+
   const supabase = createAdminClient()
 
-  // All campaigns visible to all authenticated users
-  const { data, error } = await supabase
+  let query = supabase
     .from('campaign_overview')
     .select('*')
     .order('created_at', { ascending: false })
+
+  if (!includeArchived) query = query.eq('is_archived', false)
+
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

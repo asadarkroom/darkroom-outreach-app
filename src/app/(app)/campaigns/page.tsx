@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Users, TrendingUp, ChevronRight, Pause, Play } from 'lucide-react'
+import { Plus, Users, TrendingUp, ChevronRight, Pause, Play, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 
 interface Campaign {
   campaign_id: string
   name: string
   status: string
+  is_archived: boolean
   total_enrolled: number
   active_contacts: number
   completed_contacts: number
@@ -21,10 +22,10 @@ interface Campaign {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    active: 'bg-green-900/50 text-green-400 border border-green-700/50',
-    paused: 'bg-yellow-900/50 text-yellow-400 border border-yellow-700/50',
+    active:    'bg-green-900/50 text-green-400 border border-green-700/50',
+    paused:    'bg-yellow-900/50 text-yellow-400 border border-yellow-700/50',
     completed: 'bg-blue-900/50 text-blue-400 border border-blue-700/50',
-    draft: 'bg-gray-800 text-gray-400 border border-gray-700',
+    draft:     'bg-gray-800 text-gray-400 border border-gray-700',
   }
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${map[status] || map.draft}`}>
@@ -36,24 +37,50 @@ function StatusBadge({ status }: { status: string }) {
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [showArchived, setShowArchived] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [working, setWorking] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetch('/api/analytics/campaigns')
+  function load(archived: boolean) {
+    setLoading(true)
+    fetch(`/api/analytics/campaigns${archived ? '?archived=true' : ''}`)
       .then(r => r.json())
       .then(data => setCampaigns(Array.isArray(data) ? data : []))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { load(showArchived) }, [showArchived])
 
   async function toggleStatus(id: string, current: string) {
     const next = current === 'active' ? 'paused' : 'active'
+    setWorking(id)
     await fetch(`/api/campaigns/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: next }),
     })
-    setCampaigns(prev => prev.map(c =>
-      c.campaign_id === id ? { ...c, status: next } : c
-    ))
+    setCampaigns(prev => prev.map(c => c.campaign_id === id ? { ...c, status: next } : c))
+    setWorking(null)
+  }
+
+  async function toggleArchive(id: string, currentlyArchived: boolean) {
+    setWorking(id)
+    await fetch(`/api/campaigns/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_archived: !currentlyArchived }),
+    })
+    // Remove from list (since we're either hiding archived or unarchiving back to active view)
+    setCampaigns(prev => prev.filter(c => c.campaign_id !== id))
+    setWorking(null)
+  }
+
+  async function deleteCampaign(id: string) {
+    setWorking(id)
+    await fetch(`/api/campaigns/${id}`, { method: 'DELETE' })
+    setCampaigns(prev => prev.filter(c => c.campaign_id !== id))
+    setConfirmDelete(null)
+    setWorking(null)
   }
 
   if (loading) {
@@ -72,13 +99,26 @@ export default function CampaignsPage() {
           <h1 className="text-2xl font-semibold text-white">Campaigns</h1>
           <p className="text-gray-400 text-sm mt-1">{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</p>
         </div>
-        <Link
-          href="/campaigns/new"
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Campaign
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowArchived(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
+              showArchived
+                ? 'bg-indigo-900/40 text-indigo-300 border-indigo-700/60'
+                : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
+            }`}
+          >
+            <Archive className="w-4 h-4" />
+            {showArchived ? 'Hide Archived' : 'Show Archived'}
+          </button>
+          <Link
+            href="/campaigns/new"
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Campaign
+          </Link>
+        </div>
       </div>
 
       {campaigns.length === 0 ? (
@@ -86,27 +126,41 @@ export default function CampaignsPage() {
           <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center mx-auto mb-4">
             <Megaphone className="w-8 h-8 text-gray-500" />
           </div>
-          <h3 className="text-white font-medium mb-1">No campaigns yet</h3>
-          <p className="text-gray-400 text-sm mb-4">Create your first outreach campaign to get started.</p>
-          <Link
-            href="/campaigns/new"
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create Campaign
-          </Link>
+          <h3 className="text-white font-medium mb-1">
+            {showArchived ? 'No archived campaigns' : 'No campaigns yet'}
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            {showArchived ? 'Archived campaigns will appear here.' : 'Create your first outreach campaign to get started.'}
+          </p>
+          {!showArchived && (
+            <Link
+              href="/campaigns/new"
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create Campaign
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
           {campaigns.map(c => (
-            <div key={c.campaign_id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-gray-700 transition-colors">
+            <div
+              key={c.campaign_id}
+              className={`bg-gray-900 border rounded-xl p-5 transition-colors ${
+                c.is_archived ? 'border-gray-800 opacity-60' : 'border-gray-800 hover:border-gray-700'
+              }`}
+            >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <Link href={`/campaigns/${c.campaign_id}`} className="font-medium text-white hover:text-indigo-400 transition-colors">
                       {c.name}
                     </Link>
-                    <StatusBadge status={c.status} />
+                    {c.is_archived
+                      ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-800 text-gray-500 border border-gray-700">archived</span>
+                      : <StatusBadge status={c.status} />
+                    }
                     {c.error_count > 0 && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900/50 text-red-400 border border-red-700/50">
                         {c.error_count} error{c.error_count !== 1 ? 's' : ''}
@@ -124,16 +178,58 @@ export default function CampaignsPage() {
                     {c.drafts_today > 0 && <span className="text-indigo-400">{c.drafts_today} drafted today</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {(c.status === 'active' || c.status === 'paused') && (
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {/* Pause/resume — only for non-archived active/paused */}
+                  {!c.is_archived && (c.status === 'active' || c.status === 'paused') && (
                     <button
                       onClick={() => toggleStatus(c.campaign_id, c.status)}
-                      className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-                      title={c.status === 'active' ? 'Pause campaign' : 'Resume campaign'}
+                      disabled={working === c.campaign_id}
+                      className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                      title={c.status === 'active' ? 'Pause' : 'Resume'}
                     >
                       {c.status === 'active' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </button>
                   )}
+
+                  {/* Archive / unarchive */}
+                  <button
+                    onClick={() => toggleArchive(c.campaign_id, c.is_archived)}
+                    disabled={working === c.campaign_id}
+                    className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                    title={c.is_archived ? 'Unarchive' : 'Archive'}
+                  >
+                    {c.is_archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                  </button>
+
+                  {/* Delete — opens confirm */}
+                  {confirmDelete === c.campaign_id ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-red-400">Delete?</span>
+                      <button
+                        onClick={() => deleteCampaign(c.campaign_id)}
+                        disabled={working === c.campaign_id}
+                        className="px-2 py-1 text-xs bg-red-700 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete(null)}
+                        className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDelete(c.campaign_id)}
+                      className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors"
+                      title="Delete campaign"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+
                   <Link
                     href={`/campaigns/${c.campaign_id}`}
                     className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
