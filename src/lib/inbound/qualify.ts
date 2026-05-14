@@ -242,12 +242,26 @@ Respond with ONLY raw JSON (no markdown, no code fences):
     }
   } catch (err) {
     console.error('Lead qualification error:', err)
+    // Generate a minimal on-the-fence email so the lead doesn't get stuck with no response
+    const firstName = contactName.split(' ')[0]
+    const fallbackSubject = `Re: Your ${companyName || 'Darkroom'} Inquiry`
+    const fallbackBody = [
+      `Hey ${firstName},`,
+      '',
+      `Thanks for reaching out to Darkroom. My name is ${senderFirstName}, and I manage our partnerships here.`,
+      '',
+      `I'd love to learn a bit more about what ${companyName || 'your brand'} is working on. Feel free to [grab 15 minutes on my calendar here](${calendly15MinUrl}) and we can go from there.`,
+      '',
+      `Sending my best,`,
+      '',
+      senderFirstName,
+    ].join('\n')
     return {
       tier: 'questionable',
       research_summary: `Qualification failed for ${companyName || contactName}. Review manually.`,
       disqualify_reason: undefined,
-      first_response_subject: undefined,
-      first_response_body: undefined,
+      first_response_subject: fallbackSubject,
+      first_response_body: fallbackBody,
       cadence: [],
     }
   }
