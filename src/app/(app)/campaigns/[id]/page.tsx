@@ -91,9 +91,8 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [launchSuccess, setLaunchSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'contacts' | 'steps'>('overview')
   const [previewing, setPreviewing] = useState(false)
-  const [previewResult, setPreviewResult] = useState<{ subject: string; body: string; sample?: boolean } | null>(null)
+  const [previewResults, setPreviewResults] = useState<Array<{ stepId: string; subject: string; body: string } | null>>([])
   const [previewContactId, setPreviewContactId] = useState('__sample__')
-  const [previewStepId, setPreviewStepId] = useState('')
   const [previewError, setPreviewError] = useState('')
   const [generatingDrafts, setGeneratingDrafts] = useState(false)
   const [draftResult, setDraftResult] = useState<{ processed: number; drafted: number; skipped: number; errors: number } | null>(null)
@@ -132,7 +131,6 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       setCampaign(c)
       setSteps(loadedSteps)
       setContacts(Array.isArray(co) ? co : [])
-      if (loadedSteps.length > 0) setPreviewStepId(loadedSteps[0].id)
       if (!p.error) setProgress(p)
     }).finally(() => setLoading(false))
   }, [id])
@@ -150,25 +148,33 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     await Promise.all([fetchContacts(), fetchProgress()])
   }
 
-  async function previewEmail() {
-    if (!previewStepId) return
+  async function previewAllSteps() {
+    if (steps.length === 0) return
     setPreviewing(true)
     setPreviewError('')
-    setPreviewResult(null)
+    // initialise slots as null (loading) for each step
+    setPreviewResults(steps.map(() => null))
+    const isSample = previewContactId === '__sample__'
     try {
-      const isSample = previewContactId === '__sample__'
-      const res = await fetch(`/api/campaigns/${id}/preview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          isSample
-            ? { step_id: previewStepId, sample: true }
-            : { step_id: previewStepId, contact_id: previewContactId }
-        ),
-      })
-      const text = await res.text()
-      const data = text ? JSON.parse(text) : {}
-      if (res.ok) { setPreviewResult(data) } else { setPreviewError(data.error || 'Preview failed') }
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i]
+        const res = await fetch(`/api/campaigns/${id}/preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            isSample
+              ? { step_id: step.id, sample: true }
+              : { step_id: step.id, contact_id: previewContactId }
+          ),
+        })
+        const data = await res.json()
+        if (!res.ok) { setPreviewError(data.error || `Step ${step.step_number} failed`); break }
+        setPreviewResults(prev => {
+          const next = [...prev]
+          next[i] = { stepId: step.id, subject: data.subject, body: data.body }
+          return next
+        })
+      }
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : 'Preview failed')
     } finally {
@@ -414,60 +420,81 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             </div>
           )}
 
-          {/* Email Preview */}
+          {/* Email Preview — all steps */}
           {steps.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h3 className="text-sm font-medium text-white mb-4">Email Preview</h3>
-              <div className="flex items-center gap-3 mb-4">
-                <select
-                  value={previewContactId}
-                  onChange={e => { setPreviewContactId(e.target.value); setPreviewResult(null) }}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                >
-                  <option value="__sample__">Sample — John Doe (Test Company)</option>
-                  {contacts.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.first_name || ''} {c.last_name || ''} {c.company_name ? `(${c.company_name})` : ''} — {c.email}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={previewStepId}
-                  onChange={e => { setPreviewStepId(e.target.value); setPreviewResult(null) }}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                >
-                  <option value="">Select step…</option>
-                  {steps.map(s => <option key={s.id} value={s.id}>Step {s.step_number} (Day {s.day_offset})</option>)}
-                </select>
-                <button
-                  onClick={previewEmail}
-                  disabled={!previewStepId || previewing}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
-                >
-                  {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                  {previewing ? 'Generating…' : 'Preview'}
-                </button>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-white">Preview All Steps</h3>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={previewContactId}
+                    onChange={e => { setPreviewContactId(e.target.value); setPreviewResults([]); setPreviewError('') }}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="__sample__">Sample — John Doe (Test Company)</option>
+                    {contacts.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name || ''} {c.last_name || ''} {c.company_name ? `(${c.company_name})` : ''} — {c.email}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={previewAllSteps}
+                    disabled={previewing}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
+                  >
+                    {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                    {previewing ? 'Generating…' : 'Preview'}
+                  </button>
+                </div>
               </div>
+
+              {previewContactId === '__sample__' && previewResults.length === 0 && !previewing && (
+                <p className="text-xs text-gray-500 mb-3">Previews AI-generated emails using sample contact data (John Doe, Test Company).</p>
+              )}
+
               {previewError && (
-                <div className="bg-red-900/30 border border-red-700/50 text-red-300 rounded-xl px-4 py-3 text-sm">
+                <div className="bg-red-900/30 border border-red-700/50 text-red-300 rounded-xl px-4 py-3 text-sm mb-3">
                   {previewError}
                 </div>
               )}
-              {previewResult && (
-                <div className="bg-gray-800 rounded-xl p-4 space-y-3">
-                  {previewResult.sample && (
+
+              {previewResults.length > 0 && (
+                <div className="space-y-4">
+                  {previewContactId === '__sample__' && (
                     <p className="text-xs text-yellow-500/80 bg-yellow-900/20 border border-yellow-700/30 rounded px-3 py-1.5">
                       Sample preview — using John Doe / Test Company placeholder data
                     </p>
                   )}
-                  <div>
-                    <span className="text-xs text-gray-400 font-medium">Subject</span>
-                    <p className="text-white text-sm mt-1 font-medium">{previewResult.subject}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-gray-400 font-medium">Body</span>
-                    <pre className="text-gray-300 text-sm mt-1 whitespace-pre-wrap font-sans leading-relaxed">{previewResult.body}</pre>
-                  </div>
+                  {steps.map((step, i) => {
+                    const result = previewResults[i]
+                    return (
+                      <div key={step.id} className="border border-gray-800 rounded-xl overflow-hidden">
+                        <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-800/60 border-b border-gray-800">
+                          <span className="w-5 h-5 rounded-full bg-indigo-600/40 text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">{step.step_number}</span>
+                          <span className="text-sm font-medium text-white">Step {step.step_number}</span>
+                          <span className="text-xs text-gray-500">Day {step.day_offset}</span>
+                        </div>
+                        {result === null ? (
+                          <div className="px-4 py-6 flex items-center gap-2 text-gray-500 text-sm">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Generating…
+                          </div>
+                        ) : (
+                          <div className="px-4 py-4 space-y-3">
+                            <div>
+                              <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Subject</span>
+                              <p className="text-white text-sm mt-1 font-medium">{result.subject}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Body</span>
+                              <pre className="text-gray-300 text-sm mt-1 whitespace-pre-wrap font-sans leading-relaxed">{result.body}</pre>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
