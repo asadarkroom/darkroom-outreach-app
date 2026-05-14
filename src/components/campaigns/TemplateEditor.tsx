@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useLayoutEffect } from 'react'
 
 interface TemplateEditorProps {
   value: string
@@ -22,15 +22,21 @@ interface TemplateEditorProps {
 export default function TemplateEditor({ value, onChange, placeholder, minRows = 6 }: TemplateEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-resize textarea to fit content
+  // line-height: 1.625 (leading-relaxed) × 16px base + vertical padding
+  const minHeight = minRows * 1.625 * 16 + 24 // 24px = py-3 top+bottom
+
   function autoResize() {
     const ta = textareaRef.current
     if (!ta) return
-    ta.style.height = 'auto'
+    // Collapse to zero so scrollHeight reflects true content height
+    // (setting 'auto' fights with minHeight and gives wrong reads)
+    ta.style.height = '0'
     ta.style.height = ta.scrollHeight + 'px'
   }
 
-  useEffect(() => {
+  // useLayoutEffect runs synchronously after DOM mutations, before paint —
+  // prevents the flash of incorrect height on initial load or large pastes
+  useLayoutEffect(() => {
     autoResize()
   }, [value])
 
@@ -61,13 +67,10 @@ export default function TemplateEditor({ value, onChange, placeholder, minRows =
     return lines.join('<br>') + '&nbsp;'
   }
 
-  // line-height: 1.625 (leading-relaxed) × 16px base + vertical padding
-  const minHeight = minRows * 1.625 * 16 + 24 // 24px = py-3 top+bottom
-
   return (
     <div className="rounded-lg border border-gray-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 bg-gray-900">
-      {/* Editor area: highlight layer + textarea stacked */}
-      <div className="relative">
+      {/* overflow-hidden clips the highlight layer so it never bleeds outside the box */}
+      <div className="relative overflow-hidden">
         {/* Highlighted background layer — same padding/font as textarea */}
         <div
           aria-hidden
