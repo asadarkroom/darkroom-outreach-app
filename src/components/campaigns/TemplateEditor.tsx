@@ -41,21 +41,19 @@ export default function TemplateEditor({ value, onChange, placeholder, minRows =
   }, [value])
 
   function highlight(text: string): string {
-    // Escape HTML entities before inserting as innerHTML
     const escaped = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
 
-    // Process line by line to avoid <br> interfering with regex
     const lines = escaped.split('\n').map(line => {
       let result = line
-      // Color {{ai: ...}} blocks (purple)
+      // {{ai: ...}} — tempered greedy token handles nested {{field}} inside the prompt
       result = result.replace(
-        /(\{\{ai:[^}]*\}\})/g,
+        /(\{\{ai:(?:(?!\}\})[^])*\}\})/g,
         '<span style="color:#c084fc">$1</span>'
       )
-      // Color {{field}} merge fields (blue)
+      // {{field}} merge fields (must come after ai blocks so inner fields aren't double-wrapped)
       result = result.replace(
         /(\{\{(?!ai:)[^}]*\}\})/g,
         '<span style="color:#60a5fa">$1</span>'
@@ -63,7 +61,6 @@ export default function TemplateEditor({ value, onChange, placeholder, minRows =
       return result
     })
 
-    // Trailing space prevents last-line height collapse
     return lines.join('<br>') + '&nbsp;'
   }
 
@@ -90,6 +87,7 @@ export default function TemplateEditor({ value, onChange, placeholder, minRows =
             color: 'transparent',
             caretColor: 'white',
             minHeight,
+            overflowWrap: 'break-word',
           }}
         />
       </div>

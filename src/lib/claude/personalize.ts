@@ -23,14 +23,37 @@ function applyMergeFields(template: string, contact: Contact): string {
 }
 
 /**
- * Finds all {{ai: prompt}} blocks in a template.
+ * Finds all {{ai: prompt}} blocks in a template, correctly handling nested
+ * {{field}} merge tags inside the prompt (e.g. {{ai: write about {{company_name}}}}).
+ * The naive lazy regex stops at the first }} it finds; this parser tracks depth instead.
  */
 function findAiBlocks(template: string): Array<{ full: string; prompt: string }> {
-  const regex = /\{\{ai:\s*([\s\S]*?)\}\}/g
   const blocks: Array<{ full: string; prompt: string }> = []
-  let match
-  while ((match = regex.exec(template)) !== null) {
-    blocks.push({ full: match[0], prompt: match[1].trim() })
+  let i = 0
+  while (i < template.length) {
+    const start = template.indexOf('{{ai:', i)
+    if (start === -1) break
+    let depth = 1
+    let j = start + 2 // step past the opening {{
+    while (j < template.length && depth > 0) {
+      if (template[j] === '{' && template[j + 1] === '{') {
+        depth++
+        j += 2
+      } else if (template[j] === '}' && template[j + 1] === '}') {
+        depth--
+        if (depth > 0) j += 2
+      } else {
+        j++
+      }
+    }
+    if (depth === 0) {
+      const full = template.slice(start, j + 2)
+      const prompt = template.slice(start + 5, j).trim()
+      blocks.push({ full, prompt })
+      i = j + 2
+    } else {
+      i = start + 5
+    }
   }
   return blocks
 }
@@ -98,7 +121,9 @@ export async function renderTemplate(
 
   // Step 2: fill each AI block (run sequentially to avoid rate limits)
   for (const block of aiBlocks) {
-    const filled = await fillAiBlock(block.prompt, contact, systemPrompt)
+    // Resolve merge fields inside the prompt so Claude sees the actual values
+    const resolvedPrompt = applyMergeFields(block.prompt, contact)
+    const filled = await fillAiBlock(resolvedPrompt, contact, systemPrompt)
     result = result.replace(block.full, filled)
   }
 
@@ -127,6 +152,9 @@ export async function renderTemplateWithFields(
   let result = template
 
   for (const block of aiBlocks) {
+    // Resolve merge fields inside the prompt so Claude sees the actual values
+    const resolvedPrompt = block.prompt.replace(/\{\{(\w+)\}\}/g, (match, field) => fields[field] ?? match)
+
     const contextLines = Object.entries(fields)
       .map(([k, v]) => v ? `${k.replace(/_/g, ' ')}: ${v}` : null)
       .filter(Boolean)
@@ -150,7 +178,7 @@ export async function renderTemplateWithFields(
           content: [
             `Contact information:\n${contextSection}`,
             '',
-            `Write the following for this contact:\n${block.prompt}`,
+            `Write the following for this contact:\n${resolvedPrompt}`,
           ].join('\n'),
         },
       ],
