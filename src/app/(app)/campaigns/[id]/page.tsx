@@ -91,8 +91,8 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [launchSuccess, setLaunchSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'contacts' | 'steps'>('overview')
   const [previewing, setPreviewing] = useState(false)
-  const [previewResult, setPreviewResult] = useState<{ subject: string; body: string } | null>(null)
-  const [previewContactId, setPreviewContactId] = useState('')
+  const [previewResult, setPreviewResult] = useState<{ subject: string; body: string; sample?: boolean } | null>(null)
+  const [previewContactId, setPreviewContactId] = useState('__sample__')
   const [previewStepId, setPreviewStepId] = useState('')
   const [previewError, setPreviewError] = useState('')
   const [generatingDrafts, setGeneratingDrafts] = useState(false)
@@ -128,9 +128,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       fetch(`/api/campaigns/${id}/contacts`).then(r => r.json()),
       fetch(`/api/campaigns/${id}/progress`).then(r => r.json()),
     ]).then(([c, s, co, p]) => {
+      const loadedSteps = Array.isArray(s) ? s : []
       setCampaign(c)
-      setSteps(Array.isArray(s) ? s : [])
+      setSteps(loadedSteps)
       setContacts(Array.isArray(co) ? co : [])
+      if (loadedSteps.length > 0) setPreviewStepId(loadedSteps[0].id)
       if (!p.error) setProgress(p)
     }).finally(() => setLoading(false))
   }, [id])
@@ -149,15 +151,20 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   }
 
   async function previewEmail() {
-    if (!previewContactId || !previewStepId) return
+    if (!previewStepId) return
     setPreviewing(true)
     setPreviewError('')
     setPreviewResult(null)
     try {
+      const isSample = previewContactId === '__sample__'
       const res = await fetch(`/api/campaigns/${id}/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contact_id: previewContactId, step_id: previewStepId }),
+        body: JSON.stringify(
+          isSample
+            ? { step_id: previewStepId, sample: true }
+            : { step_id: previewStepId, contact_id: previewContactId }
+        ),
       })
       const text = await res.text()
       const data = text ? JSON.parse(text) : {}
@@ -408,7 +415,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           )}
 
           {/* Email Preview */}
-          {contacts.length > 0 && steps.length > 0 && (
+          {steps.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h3 className="text-sm font-medium text-white mb-4">Email Preview</h3>
               <div className="flex items-center gap-3 mb-4">
@@ -417,7 +424,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                   onChange={e => { setPreviewContactId(e.target.value); setPreviewResult(null) }}
                   className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
-                  <option value="">Select contact…</option>
+                  <option value="__sample__">Sample — John Doe (Test Company)</option>
                   {contacts.map(c => (
                     <option key={c.id} value={c.id}>
                       {c.first_name || ''} {c.last_name || ''} {c.company_name ? `(${c.company_name})` : ''} — {c.email}
@@ -434,7 +441,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 </select>
                 <button
                   onClick={previewEmail}
-                  disabled={!previewContactId || !previewStepId || previewing}
+                  disabled={!previewStepId || previewing}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
                 >
                   {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
@@ -448,6 +455,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               )}
               {previewResult && (
                 <div className="bg-gray-800 rounded-xl p-4 space-y-3">
+                  {previewResult.sample && (
+                    <p className="text-xs text-yellow-500/80 bg-yellow-900/20 border border-yellow-700/30 rounded px-3 py-1.5">
+                      Sample preview — using John Doe / Test Company placeholder data
+                    </p>
+                  )}
                   <div>
                     <span className="text-xs text-gray-400 font-medium">Subject</span>
                     <p className="text-white text-sm mt-1 font-medium">{previewResult.subject}</p>
