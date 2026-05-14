@@ -449,7 +449,7 @@ export default function InboundEnrollmentPage({ params }: { params: Promise<{ id
                     </p>
                   </div>
                 </div>
-              ) : pollCount >= 5 ? (
+              ) : pollCount >= 5 || (!hasFirstResponse && enrollment.lead_tier !== null && enrollment.lead_tier !== 'unassessed') ? (
                 <div className="px-4 py-8 text-center">
                   <AlertTriangle className="w-5 h-5 text-yellow-600 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">Qualification didn't complete.</p>
