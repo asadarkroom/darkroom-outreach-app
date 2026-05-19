@@ -1,7 +1,5 @@
 'use client'
 
-import { useRef, useLayoutEffect } from 'react'
-
 interface TemplateEditorProps {
   value: string
   onChange: (v: string) => void
@@ -9,36 +7,9 @@ interface TemplateEditorProps {
   minRows?: number
 }
 
-/**
- * A textarea with syntax-highlighted overlay for template syntax:
- *  - {{field}}   → blue
- *  - {{ai: ...}} → purple
- *  - Plain text  → white
- *
- * Auto-grows with content so no scroll-sync is needed.
- * Uses a transparent textarea over a highlight div; text selection
- * is made visible via a semi-opaque selection background.
- */
 export default function TemplateEditor({ value, onChange, placeholder, minRows = 6 }: TemplateEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-
   // line-height: 1.625 (leading-relaxed) × 16px base + vertical padding
   const minHeight = minRows * 1.625 * 16 + 24 // 24px = py-3 top+bottom
-
-  function autoResize() {
-    const ta = textareaRef.current
-    if (!ta) return
-    // Collapse to zero so scrollHeight reflects true content height
-    // (setting 'auto' fights with minHeight and gives wrong reads)
-    ta.style.height = '0'
-    ta.style.height = ta.scrollHeight + 'px'
-  }
-
-  // useLayoutEffect runs synchronously after DOM mutations, before paint —
-  // prevents the flash of incorrect height on initial load or large pastes
-  useLayoutEffect(() => {
-    autoResize()
-  }, [value])
 
   function highlight(text: string): string {
     const escaped = text
@@ -53,7 +24,7 @@ export default function TemplateEditor({ value, onChange, placeholder, minRows =
         /(\{\{ai:(?:(?!\}\})[^])*\}\})/g,
         '<span style="color:#c084fc">$1</span>'
       )
-      // {{field}} merge fields (must come after ai blocks so inner fields aren't double-wrapped)
+      // {{field}} merge fields
       result = result.replace(
         /(\{\{(?!ai:)[^}]*\}\})/g,
         '<span style="color:#60a5fa">$1</span>'
@@ -61,32 +32,36 @@ export default function TemplateEditor({ value, onChange, placeholder, minRows =
       return result
     })
 
+    // Trailing &nbsp; prevents the last line from collapsing to zero height
     return lines.join('<br>') + '&nbsp;'
   }
 
   return (
     <div className="rounded-lg border border-gray-700 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 bg-gray-900">
-      {/* overflow-hidden clips the highlight layer so it never bleeds outside the box */}
-      <div className="relative overflow-hidden">
-        {/* Highlighted background layer — same padding/font as textarea */}
+      {/*
+        The highlight div is in normal flow — it drives the container height via CSS,
+        no JavaScript resize needed. The textarea is absolutely positioned on top so it
+        always matches the container exactly, fixing both the cut-off and cursor issues.
+      */}
+      <div className="relative">
+        {/* Highlight div — in normal flow, sets the height */}
         <div
           aria-hidden
-          className="absolute inset-0 font-mono text-sm px-3.5 py-3 leading-relaxed whitespace-pre-wrap break-words pointer-events-none text-white"
+          className="w-full font-mono text-sm px-3.5 py-3 leading-relaxed whitespace-pre-wrap break-words pointer-events-none text-white"
+          style={{ minHeight }}
           dangerouslySetInnerHTML={{ __html: highlight(value) }}
         />
 
-        {/* Transparent textarea on top — drives the height */}
+        {/* Textarea — absolute overlay, stretches to match the highlight div's height */}
         <textarea
-          ref={textareaRef}
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
           spellCheck={false}
-          className="relative block w-full bg-transparent font-mono text-sm px-3.5 py-3 leading-relaxed outline-none placeholder-gray-600 resize-none overflow-hidden selection:bg-indigo-500/40"
+          className="absolute inset-0 w-full h-full bg-transparent font-mono text-sm px-3.5 py-3 leading-relaxed outline-none placeholder-gray-600 resize-none overflow-hidden selection:bg-indigo-500/40"
           style={{
             color: 'transparent',
             caretColor: 'white',
-            minHeight,
             overflowWrap: 'break-word',
           }}
         />
