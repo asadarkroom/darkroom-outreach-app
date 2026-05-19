@@ -96,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         contact_id: contact.id,
         step_id: step.id,
         campaign_id: id,
-        user_id: session.user.id,
+        user_id: campaign.user_id,
         send_date: sendDate.toISOString().split('T')[0],
         status: 'pending',
       })
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Log analytics events for enrollments
   const enrollEvents = contactUpdates.map(c => ({
-    user_id: session.user.id,
+    user_id: campaign.user_id,
     campaign_id: id,
     contact_id: c.id,
     event_type: 'enrolled',
