@@ -44,12 +44,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Campaign has no sequence steps' }, { status: 400 })
   }
 
-  // Get unenrolled contacts for this campaign
-  const { data: contacts, error: contactsError } = await supabase
+  // Get contacts that haven't been fully enrolled yet.
+  // Also picks up contacts stuck in a partial state (enrolled_at set but no
+  // scheduled emails) from a previously failed launch attempt.
+  const { data: allContacts, error: contactsError } = await supabase
     .from('contacts')
     .select('*')
     .eq('campaign_id', id)
-    .is('enrolled_at', null)
+
+  const { data: alreadyScheduled } = await supabase
+    .from('scheduled_emails')
+    .select('contact_id')
+    .eq('campaign_id', id)
+
+  const scheduledContactIds = new Set((alreadyScheduled || []).map((r: { contact_id: string }) => r.contact_id))
+  const contacts = (allContacts || []).filter((c: { id: string }) => !scheduledContactIds.has(c.id))
 
   if (contactsError) {
     return NextResponse.json({ error: 'Failed to fetch contacts' }, { status: 500 })
@@ -103,21 +112,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
-  // Bulk enroll contacts
-  for (const update of contactUpdates) {
-    await supabase.from('contacts').update({
-      enrolled_at: update.enrolled_at,
-      status: update.status,
-    }).eq('id', update.id)
-  }
-
-  // Insert scheduled emails
+  // Insert scheduled emails first — if this fails, contacts stay unenrolled
   const { error: scheduleError } = await supabase
     .from('scheduled_emails')
     .insert(scheduledEmailRows)
 
   if (scheduleError) {
     return NextResponse.json({ error: 'Failed to schedule emails: ' + scheduleError.message }, { status: 500 })
+  }
+
+  // Mark contacts as enrolled only after emails are safely inserted
+  for (const update of contactUpdates) {
+    await supabase.from('contacts').update({
+      enrolled_at: update.enrolled_at,
+      status: update.status,
+    }).eq('id', update.id)
   }
 
   // Mark campaign as active
